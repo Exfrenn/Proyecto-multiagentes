@@ -88,3 +88,34 @@ class Road(FixedAgent):
         super().__init__(model)
         self.cell = cell
         self.direction = direction
+
+class Sidewalk(FixedAgent):
+    """
+    Sidewalk agent. Determines where the pedestrians can move, and in which direction.
+    """
+    def __init__(self, model, cell, direction= "Left"):
+        """
+        Creates a new sidewalk.
+        Args:
+            model: Model reference for the agent
+            cell: The initial position of the agent
+        """
+        super().__init__(model)
+        self.cell = cell
+        self.direction = direction
+
+class PedestrianWalk(FixedAgent):
+    """
+    PedestrianWalk agent. Determines where the pedestrians can move, and in which direction.
+    """
+    def __init__(self, model, cell, direction= "Left"):
+        """
+        Creates a new PedestrianWalk.
+        Args:
+            model: Model reference for the agent
+            cell: The initial position of the agent
+        """
+        super().__init__(model)
+        self.cell = cell
+        self.direction = direction
+

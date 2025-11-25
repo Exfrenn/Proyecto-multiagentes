@@ -24,7 +24,7 @@ class CityModel(Model):
         self.traffic_lights = []
 
         # Load the map file. The map file is a text file where each character represents an agent.
-        with open("city_files/2024_base.txt") as baseFile:
+        with open("city_files/2024_modified.txt") as baseFile:
             lines = baseFile.readlines()
             self.width = len(lines[0])
             self.height = len(lines)
@@ -56,6 +56,13 @@ class CityModel(Model):
 
                     elif col == "D":
                         agent = Destination(self, cell)
+
+                    elif col == "B":
+                        agent = Sidewalk(self, cell)
+
+                    elif col == "C":
+                        agent = PedestrianWalk(self, cell)
+
 
         self.running = True
 
