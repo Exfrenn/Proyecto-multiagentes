@@ -1,5 +1,5 @@
 /*
- * Library file with classes used for 3D vectors, matrices and transformations
+ * Library file with objects and funcitions used for 3D vectors, matrices and transformations
  *
  * Gilberto Echeverria
  * 2025-07-22
@@ -11,85 +11,87 @@ const Y = 1;
 const Z = 2;
 
 
+
 // Vector 3
 class V3 {
     static create(x, y, z) {
         const v = new Float32Array(3);
-        v[X] = x;
-        v[Y] = y;
-        v[Z] = z;
+        v[0] = x;
+        v[1] = y;
+        v[2] = z;
         return v;
     }
 
     static length(v) {
-        return Math.sqrt(v[X] * v[X] + v[Y] * v[Y] + v[Z] * v[Z]);
+        let len = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+        return len;
     }
 
     static normalize(v, dest) {
         dest = dest || new Float32Array(3);
-        const size = V3.length(v);
-        if (size > 0) {
-            dest[X] = v[X] / size;
-            dest[Y] = v[Y] / size;
-            dest[Z] = v[Z] / size;
-        } else {
-            dest[X] = 0;
-            dest[Y] = 0;
-            dest[Z] = 0;
+        let len = V3.length(v);
+        if (len != 0){
+            dest[0] = v[0] / len;
+            dest[1] = v[1] / len;
+            dest[2] = v[2] / len;
+        }
+        else{
+            dest[0] = 0;
+            dest[1] = 0;
+            dest[2] = 0;
         }
         return dest;
     }
 
     static dot(u, v) {
-        return u[X] * v[X] + u[Y] * v[Y] + u[Z] * v[Z];
+        let P = u[0] * v[0] + u[1] * v[1] + u[2] * v[2]; 
+        return P;
     }
 
     static cross(u, v, dest) {
         dest = dest || new Float32Array(3);
-        dest[X] = u[Y] * v[Z] - u[Z] * v[Y];
-        dest[Y] = u[Z] * v[X] - u[X] * v[Z];
-        dest[Z] = u[X] * v[Y] - u[Y] * v[X];
+        dest[0] = u[1] * v[2] - u[2] * v[1];
+        dest[1] = u[2] * v[0] - u[0] * v[2];
+        dest[2] = u[0] * v[1] - u[1] * v[0];
         return dest;
     }
 
-    // Add two vectors
     static add(u, v, dest) {
         dest = dest || new Float32Array(3);
-        dest[X] = u[X] + v[X];
-        dest[Y] = u[Y] + v[Y];
-        dest[Z] = u[Z] + v[Z];
+        dest[0] = u[0] + v[0];
+        dest[1] = u[1] + v[1];
+        dest[2] = u[2] + v[2];
         return dest;
     }
 
-    // Subtract two vectors
     static subtract(u, v, dest) {
         dest = dest || new Float32Array(3);
-        dest[X] = u[X] - v[X];
-        dest[Y] = u[Y] - v[Y];
-        dest[Z] = u[Z] - v[Z];
+        dest[0] = u[0] - v[0];
+        dest[1] = u[1] - v[1];
+        dest[2] = u[2] - v[2];
         return dest;
     }
 
-    // Multiply a vector by a scalar value
-    static scale(u, s, dest) {
+    static scale(u, scalar, dest) {
         dest = dest || new Float32Array(3);
-        dest[X] = u[X] * s;
-        dest[Y] = u[Y] * s;
-        dest[Z] = u[Z] * s;
+        dest[0] = u[0] * scalar;
+        dest[1] = u[1] * scalar;
+        dest[2] = u[2] * scalar; 
         return dest;
     }
 }
 
+/*
+// Matrix guide:
+// Consider the rows and columns are transposed
+a00 a01 a02 a03           b00 b01 b02 b03
+a10 a11 a12 a13           b10 b11 b12 b13
+a20 a21 a22 a23           b20 b21 b22 b23
+a30 a31 a32 a33           b30 b31 b32 b33
+*/
+
 // 4x4 matrices used for 3D transformations
 class M4 {
-    /*
-    // Matrix guide:
-    // Consider the rows and columns are transposed
-    a00 a01 a02 a03           b00 b01 b02 b03
-    a10 a11 a12 a13           b10 b11 b12 b13
-    a20 a21 a22 a23           b20 b21 b22 b23
-    a30 a31 a32 a33           b30 b31 b32 b33
-    */
     static multiply(a, b) {
         // Get the elements in the matrix
         let a00 = a[0 * 4 + 0];
@@ -129,22 +131,10 @@ class M4 {
         // The matrices are oriented transposed,
         // so the multiplication must be adjusted accordingly
         return [
-            a00 * b00 + a10 * b01 + a20 * b02 + a30 * b03,
-            a01 * b00 + a11 * b01 + a21 * b02 + a31 * b03,
-            a02 * b00 + a12 * b01 + a22 * b02 + a32 * b03,
-            a03 * b00 + a13 * b01 + a23 * b02 + a33 * b03,
-            a00 * b10 + a10 * b11 + a20 * b12 + a30 * b13,
-            a01 * b10 + a11 * b11 + a21 * b12 + a31 * b13,
-            a02 * b10 + a12 * b11 + a22 * b12 + a32 * b13,
-            a03 * b10 + a13 * b11 + a23 * b12 + a33 * b13,
-            a00 * b20 + a10 * b21 + a20 * b22 + a30 * b23,
-            a01 * b20 + a11 * b21 + a21 * b22 + a31 * b23,
-            a02 * b20 + a12 * b21 + a22 * b22 + a32 * b23,
-            a03 * b20 + a13 * b21 + a23 * b22 + a33 * b23,
-            a00 * b30 + a10 * b31 + a20 * b32 + a30 * b33,
-            a01 * b30 + a11 * b31 + a21 * b32 + a31 * b33,
-            a02 * b30 + a12 * b31 + a22 * b32 + a32 * b33,
-            a03 * b30 + a13 * b31 + a23 * b32 + a33 * b33,
+            ((a00 * b00)+(a10 * b01)+(a20 * b02)+(a30 * b03)), ((a01 * b00)+(a11 * b01)+(a21 * b02)+(a31 * b03)), ((a02 * b00)+(a12 * b01)+(a22 * b02)+(a32 * b03)), ((a03 * b00)+(a13 * b01)+(a23 * b02)+(a33 * b03)),
+            ((a00 * b10)+(a10 * b11)+(a20 * b12)+(a30 * b13)), ((a01 * b10)+(a11 * b11)+(a21 * b12)+(a31 * b13)), ((a02 * b10)+(a12 * b11)+(a22 * b12)+(a32 * b13)), ((a03 * b10)+(a13 * b11)+(a23 * b12)+(a33 * b13)),
+            ((a00 * b20)+(a10 * b21)+(a20 * b22)+(a30 * b23)), ((a01 * b20)+(a11 * b21)+(a21 * b22)+(a31 * b23)), ((a02 * b20)+(a12 * b21)+(a22 * b22)+(a32 * b23)), ((a03 * b20)+(a13 * b21)+(a23 * b22)+(a33 * b23)),
+            ((a00 * b30)+(a10 * b31)+(a20 * b32)+(a30 * b33)), ((a01 * b30)+(a11 * b31)+(a21 * b32)+(a31 * b33)), ((a02 * b30)+(a12 * b31)+(a22 * b32)+(a32 * b33)), ((a03 * b30)+(a13 * b31)+(a23 * b32)+(a33 * b33)),
         ];
     }
 
@@ -157,57 +147,51 @@ class M4 {
     }
 
     static translation(v) {
-        const tx = v[X];
-        const ty = v[Y];
-        const tz = v[Z];
+        let tx = v[0];
+        let ty = v[1];
+        let tz = v[2];
         return [ 1,  0,  0,  0,
                  0,  1,  0,  0,
                  0,  0,  1,  0,
-                tx, ty, tz,  1];
+                 tx,  ty,  tz,  1];
     }
 
     static rotationX(angleRadians) {
-        const c = Math.cos(angleRadians);
-        const s = Math.sin(angleRadians);
         return [ 1,  0,  0,  0,
-                 0,  c,  s,  0,
-                 0, -s,  c,  0,
+                 0,  Math.cos(angleRadians),  Math.sin(angleRadians),  0,
+                 0,  -Math.sin(angleRadians),  Math.cos(angleRadians),   0,
                  0,  0,  0,  1];
     }
 
     static rotationY(angleRadians) {
-        const c = Math.cos(angleRadians);
-        const s = Math.sin(angleRadians);
-        return [ c,  0, -s,  0,
+        return [ Math.cos(angleRadians),  0,  -Math.sin(angleRadians),  0,
                  0,  1,  0,  0,
-                 s,  0,  c,  0,
+                 Math.sin(angleRadians),  0,  Math.cos(angleRadians),  0,
                  0,  0,  0,  1];
     }
 
     static rotationZ(angleRadians) {
-        const c = Math.cos(angleRadians);
-        const s = Math.sin(angleRadians);
-        return [ c,  s,  0,  0,
-                -s,  c,  0,  0,
+        return [ Math.cos(angleRadians),  Math.sin(angleRadians),  0,  0,
+                 -Math.sin(angleRadians),  Math.cos(angleRadians),   0,  0,
                  0,  0,  1,  0,
                  0,  0,  0,  1];
     }
 
     static scale(v) {
-        const sx = v[X];
-        const sy = v[Y];
-        const sz = v[Z];
-        return [sx,  0,  0,  0,
-                 0, sy,  0,  0,
-                 0,  0, sz,  0,
+        let sx = v[0];
+        let sy = v[1];
+        let sz = v[2];
+        return [ sx,  0,  0,  0,
+                 0,  sy,  0,  0,
+                 0,  0,  sz,  0,
                  0,  0,  0,  1];
     }
 
     /**
      * Takes the transpose of a matrix.
-     * @param {M4} m The matrix.
-     * @param {M4} [dst] matrix to hold result. If not passed a new one is created.
-     * @return {M4} The transpose of m.
+     * @param {m4} m The matrix.
+     * @param {m4} [dst] matrix to hold result. If not passed a new one is created.
+     * @return {m4} The transpose of m.
      */
     static transpose(m, dst) {
         dst = dst || new Float32Array(16);
@@ -280,9 +264,9 @@ class M4 {
 
     /**
      * Computes the inverse of a 4-by-4 matrix.
-     * @param {M4} m The matrix.
-     * @param {M4} [dst] matrix to hold result. If not passed a new one is created.
-     * @return {M4} The inverse of m.
+     * @param {m4} m The matrix.
+     * @param {m4} [dst] matrix to hold result. If not passed a new one is created.
+     * @return {m4} The inverse of m.
      */
     static inverse(m, dst) {
         dst = dst || new Float32Array(16);
@@ -388,8 +372,8 @@ class M4 {
      *     of the near clipping plane.
      * @param {number} zFar The depth (negative z coordinate)
      *     of the far clipping plane.
-     * @param {M4} [dst] matrix to hold result. If not passed a new one is created.
-     * @return {M4} The perspective matrix.
+     * @param {m4} [dst] matrix to hold result. If not passed a new one is created.
+     * @return {m4} The perspective matrix.
      */
     static perspective(fieldOfViewYInRadians, aspect, zNear, zFar, dst) {
         dst = dst || new Float32Array(16);
@@ -432,8 +416,8 @@ class M4 {
      *     of the near clipping plane.
      * @param {number} far The depth (negative z coordinate)
      *     of the far clipping plane.
-     * @param {M4} [dst] Output matrix. If not passed a new one is created.
-     * @return {M4} The perspective matrix.
+     * @param {m4} [dst] Output matrix. If not passed a new one is created.
+     * @return {m4} The perspective matrix.
      */
     static ortho(left, right, bottom, top, near, far, dst) {
         dst = dst || new Float32Array(16);
@@ -476,8 +460,8 @@ class M4 {
      * @param {number} top The y coordinate of the right plane of the box.
      * @param {number} near The negative z coordinate of the near plane of the box.
      * @param {number} far The negative z coordinate of the far plane of the box.
-     * @param {M4} [dst] Output matrix. If not passed a new one is created.
-     * @return {M4} The perspective projection matrix.
+     * @param {m4} [dst] Output matrix. If not passed a new one is created.
+     * @return {m4} The perspective projection matrix.
      */
     static frustum(left, right, bottom, top, near, far, dst) {
         dst = dst || new Float32Array(16);
