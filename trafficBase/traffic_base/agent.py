@@ -40,6 +40,9 @@ class Car(CellAgent):
         self.main_state = MainState.ACTIVE  # Estado principal (nivel 1)
         self.navigating_state = NavigatingState.MOVING  # Sub-estado (nivel 2)
         
+        # Orientación visual del carro (dirección hacia donde "mira")
+        self.orientation = "Up"  # Dirección inicial por defecto
+        
         self.steps_taken = 0                # Contador de pasos
         self.waiting_time = 0               # Tiempo esperando (para semáforos/colisiones)
         
@@ -70,6 +73,8 @@ class Car(CellAgent):
         """Transición al estado final ARRIVED"""
         self.main_state = MainState.ARRIVED
         self.navigating_state = None  # No hay sub-estado cuando está ARRIVED
+        print(f"🏁 Carro llegó a destino en {self.cell.coordinate}")
+        self.remove()  # Auto-eliminación para liberar espacio
     
     def transition_navigating_state(self, new_state):
         """
@@ -253,18 +258,14 @@ class Car(CellAgent):
         # NIVEL 1: VERIFICAR ESTADO PRINCIPAL
         # ============================================
         
-        # DESACTIVADO: Verificación de destino
-        # Los carros ahora solo se mueven continuamente por el mundo
-        # sin intentar llegar a un destino específico
+        # Prioridad 1: Verificar si llegó al destino
+        if self._is_at_destination():
+            self.transition_to_arrived()
+            return 'stop'
         
-        # Prioridad 1: Verificar si llegó al destino (DESACTIVADO)
-        # if self._is_at_destination():
-        #     self.transition_to_arrived()
-        #     return 'stop'
-        
-        # Si ya llegó, no hacer nada (DESACTIVADO)
-        # if self.is_arrived():
-        #     return 'stop'
+        # Si ya llegó, no hacer nada
+        if self.is_arrived():
+            return 'stop'
         
         # ============================================
         # NIVEL 2: ESTADO ACTIVE - EVALUAR SUB-ESTADOS
@@ -331,7 +332,26 @@ class Car(CellAgent):
             perception: Diccionario con información del entorno
         """
         if action == 'move':
-            self.cell = perception['next_cell']
+            # Calcular orientación antes de moverse
+            next_cell = perception['next_cell']
+            current_pos = self.cell.coordinate
+            next_pos = next_cell.coordinate
+            
+            dx = next_pos[0] - current_pos[0]
+            dy = next_pos[1] - current_pos[1]
+            
+            # Actualizar orientación según dirección de movimiento
+            if dx == 1:
+                self.orientation = "Right"
+            elif dx == -1:
+                self.orientation = "Left"
+            elif dy == 1:
+                self.orientation = "Up"
+            elif dy == -1:
+                self.orientation = "Down"
+            
+            # Moverse a la siguiente celda
+            self.cell = next_cell
             self.steps_taken += 1
         elif action == 'wait':
             # El carro espera en su posición actual
@@ -339,6 +359,7 @@ class Car(CellAgent):
         elif action == 'stop':
             # El carro ha llegado a su destino
             pass
+
 
     def step(self):
         """ 
@@ -371,13 +392,28 @@ class Traffic_Light(FixedAgent):
         self.cell = cell
         self.state = state
         self.timeToChange = timeToChange
+        self.time_remaining = timeToChange  # Tiempo restante hasta el cambio
 
     def step(self):
         """ 
         To change the state (green or red) of the traffic light in case you consider the time to change of each traffic light.
         """
+        # Calcular tiempo restante
+        steps_since_change = self.model.steps % self.timeToChange
+        self.time_remaining = self.timeToChange - steps_since_change
+        
+        # Cambiar estado cuando corresponda
         if self.model.steps % self.timeToChange == 0:
             self.state = not self.state
+            self.time_remaining = self.timeToChange
+    
+    def get_seconds_remaining(self):
+        """
+        Retorna el número de steps antes del próximo cambio de estado.
+        Útil para que los carros tomen decisiones basadas en el tiempo restante.
+        """
+        return self.time_remaining
+
 
 class Destination(FixedAgent):
     """
