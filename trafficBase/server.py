@@ -49,9 +49,18 @@ model_params = {
         "value": 42,
         "label": "Random Seed",
     },
+    "spawn_interval": {
+        "type": "SliderInt",
+        "value": 10,
+        "label": "Spawn Interval (steps)",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+    },
 }
 
-model = CityModel(model_params["N"])
+model = CityModel(model_params["N"], spawn_interval=model_params["spawn_interval"]["value"])
+
 
 space_component = make_space_component(
     agent_portrayal, draw_grid=False, post_process=post_process
