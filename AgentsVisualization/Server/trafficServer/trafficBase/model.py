@@ -6,7 +6,7 @@ import json
 class CityModel(Model):
     """City traffic simulation model."""
 
-    def __init__(self, N, seed=42, spawn_interval=10):
+    def __init__(self, N=10, seed=42, spawn_interval=10):
         """Initialize city model."""
         super().__init__(seed=seed)
 
