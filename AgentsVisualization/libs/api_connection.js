@@ -8,7 +8,7 @@
 
 'use strict';
 
-import { Object3D } from '../libs/object3d';
+import { Object3D } from './object3d.js';
 
 // Define the agent server URI
 const agent_server_uri = "http://localhost:8585/";
@@ -16,12 +16,17 @@ const agent_server_uri = "http://localhost:8585/";
 // Initialize arrays to store agents and obstacles
 const agents = [];
 const obstacles = [];
+const trafficLights = [];
+const roads = [];
+const destinations = [];
+const sidewalks = [];
+const pedestrianWalks = [];
 
 // Define the data object
 const initData = {
     NAgents: 20,
-    width: 28,
-    height: 28
+    width: 30,
+    height: 30
 };
 
 
@@ -35,7 +40,7 @@ async function initAgentsModel() {
         // Send a POST request to the agent server to initialize the model
         let response = await fetch(agent_server_uri + "init", {
             method: 'POST',
-            headers: { 'Content-Type':'application/json' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(initData)
         });
 
@@ -44,6 +49,9 @@ async function initAgentsModel() {
             // Parse the response as JSON and log the message
             let result = await response.json();
             console.log(result.message);
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
         }
 
     } catch (error) {
@@ -66,12 +74,12 @@ async function getAgents() {
             let result = await response.json();
 
             // Log the agent positions
-            //console.log("getAgents positions: ", result.positions)
+            //console.log("getAgents positions: ", result.agentpos)
 
             // Check if the agents array is empty
             if (agents.length == 0) {
                 // Create new agents and add them to the agents array
-                for (const agent of result.positions) {
+                for (const agent of result.agentpos) {
                     const newAgent = new Object3D(agent.id, [agent.x, agent.y, agent.z]);
                     // Store the initial position
                     newAgent['oldPosArray'] = newAgent.posArray;
@@ -82,20 +90,20 @@ async function getAgents() {
 
             } else {
                 // Update the positions of existing agents
-                for (const agent of result.positions) {
+                for (const agent of result.agentpos) {
                     const current_agent = agents.find((object3d) => object3d.id == agent.id);
 
                     // Check if the agent exists in the agents array
-                    if(current_agent != undefined){
+                    if (current_agent != undefined) {
                         // Update the agent's position
                         current_agent.oldPosArray = current_agent.posArray;
-                        current_agent.position = {x: agent.x, y: agent.y, z: agent.z};
+                        current_agent.position = { x: agent.x, y: agent.y, z: agent.z };
                     }
-
-                    //console.log("OLD: ", current_agent.oldPosArray,
-                    //            " NEW: ", current_agent.posArray);
                 }
             }
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
         }
 
     } catch (error) {
@@ -118,16 +126,109 @@ async function getObstacles() {
             let result = await response.json();
 
             // Create new obstacles and add them to the obstacles array
-            for (const obstacle of result.positions) {
+            for (const obstacle of result.obstaclepos) {
                 const newObstacle = new Object3D(obstacle.id, [obstacle.x, obstacle.y, obstacle.z]);
                 obstacles.push(newObstacle);
             }
             // Log the obstacles array
             //console.log("Obstacles:", obstacles);
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
         }
 
     } catch (error) {
         // Log any errors that occur during the request
+        console.log(error);
+    }
+}
+
+async function getTrafficLights() {
+    try {
+        let response = await fetch(agent_server_uri + "getTrafficLights");
+        if (response.ok) {
+            let result = await response.json();
+            for (const tf of result.TrafficLightpos) {
+                const newTF = new Object3D(tf.id, [tf.x, tf.y, tf.z]);
+                trafficLights.push(newTF);
+            }
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+async function getRoads() {
+    try {
+        let response = await fetch(agent_server_uri + "getRoads");
+        if (response.ok) {
+            let result = await response.json();
+            for (const road of result.Roadpos) {
+                const newRoad = new Object3D(road.id, [road.x, road.y, road.z]);
+                roads.push(newRoad);
+            }
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+async function getDestinations() {
+    try {
+        let response = await fetch(agent_server_uri + "getDestinations");
+        if (response.ok) {
+            let result = await response.json();
+            for (const dest of result.Destinationpos) {
+                const newDest = new Object3D(dest.id, [dest.x, dest.y, dest.z]);
+                destinations.push(newDest);
+            }
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+async function getSidewalks() {
+    try {
+        let response = await fetch(agent_server_uri + "getSidewalks");
+        if (response.ok) {
+            let result = await response.json();
+            for (const sw of result.Sidewalkpos) {
+                const newSW = new Object3D(sw.id, [sw.x, sw.y, sw.z]);
+                sidewalks.push(newSW);
+            }
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+async function getPedestrianWalks() {
+    try {
+        let response = await fetch(agent_server_uri + "getPedestrianWalks");
+        if (response.ok) {
+            let result = await response.json();
+            for (const pw of result.PedestrianWalkpos) {
+                const newPW = new Object3D(pw.id, [pw.x, pw.y, pw.z]);
+                pedestrianWalks.push(newPW);
+            }
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
+        }
+    } catch (error) {
         console.log(error);
     }
 }
@@ -146,6 +247,9 @@ async function update() {
             await getAgents();
             // Log a message indicating that the agents have been updated
             //console.log("Updated agents");
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
         }
 
     } catch (error) {
@@ -154,4 +258,4 @@ async function update() {
     }
 }
 
-export { agents, obstacles, initAgentsModel, update, getAgents, getObstacles };
+export { agents, obstacles, trafficLights, roads, destinations, sidewalks, pedestrianWalks, initAgentsModel, update, getAgents, getObstacles, getTrafficLights, getRoads, getDestinations, getSidewalks, getPedestrianWalks };
