@@ -48,6 +48,12 @@ class CityModel(Model):
                         agent = Destination(f"d_{r*self.width+c}", self)
                         self.grid.place_agent(agent, (c, self.height - r - 1))
 
+                    # elif col == "B":
+                    #     agent = Sidewalk(self, cell)
+
+                    # elif col == "C":
+                    #     agent = PedestrianWalk(self, cell)
+
         self.num_agents = N
         self.running = True
 
