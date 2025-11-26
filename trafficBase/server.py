@@ -1,8 +1,7 @@
 from traffic_base.agent import *
 from traffic_base.model import CityModel
 
-from mesa.visualization import Slider, SolaraViz, make_space_component
-from mesa.visualization.components import AgentPortrayalStyle
+from mesa.visualization import SolaraViz, make_space_component
 
 
 def agent_portrayal(agent):
@@ -10,30 +9,32 @@ def agent_portrayal(agent):
     if agent is None:
         return
 
-    portrayal = AgentPortrayalStyle(
-        marker="s",
-    )
+    portrayal = {
+        "color": "white",
+        "size": 25,
+        "marker": "s",
+    }
 
     if isinstance(agent, Road):
-        portrayal.color = "#aaa"
+        portrayal["color"] = "#aaa"
 
     if isinstance(agent, Destination):
-        portrayal.color = "lightgreen"
+        portrayal["color"] = "lightgreen"
 
     if isinstance(agent, Traffic_Light):
-        portrayal.color = "red" if not agent.state else "green"
+        portrayal["color"] = "red" if not agent.state else "green"
 
     if isinstance(agent, Obstacle):
-        portrayal.color = "#555"
+        portrayal["color"] = "#555"
 
     if isinstance(agent, Car):
-        portrayal.color = "blue"
+        portrayal["color"] = "blue"
 
     if isinstance(agent, Sidewalk):
-        portrayal.color = "#d3d3d3"
+        portrayal["color"] = "#d3d3d3"
 
     if isinstance(agent, PedestrianWalk):
-        portrayal.color = "#f5eb5f"
+        portrayal["color"] = "#f5eb5f"
 
     return portrayal
 
