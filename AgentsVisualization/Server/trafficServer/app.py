@@ -1,5 +1,5 @@
-from trafficBase.agent import *
-from trafficBase.model import CityModel
+from trafficAgents.traffic_base.agent import *
+from trafficAgents.traffic_base.model import CityModel
 
 from mesa.visualization import SolaraViz, make_space_component
 

@@ -2,6 +2,7 @@ from mesa import Model
 from mesa.experimental.cell_space import OrthogonalMooreGrid
 from .agent import *
 import json
+import os
 
 class CityModel(Model):
     """City traffic simulation model."""
@@ -27,7 +28,15 @@ class CityModel(Model):
         """Initialize city model."""
         super().__init__(seed=seed)
 
-        map_character_dictionary = json.load(open("city_files/mapDictionary.json"))
+        
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        traffic_agents_dir = os.path.dirname(current_dir)
+        
+        city_files_dir = os.path.join(traffic_agents_dir, "city_files")
+        
+        map_dict_path = os.path.join(city_files_dir, "mapDictionary.json")
+        map_character_dictionary = json.load(open(map_dict_path))
 
         self.num_agents = initial_agents_count
         self.traffic_lights = []
@@ -48,7 +57,8 @@ class CityModel(Model):
         self.max_cars = 10
         self.max_pedestrians = 5
 
-        with open("city_files/2024_modified.txt") as map_file:
+        map_file_path = os.path.join(city_files_dir, "2024_modified.txt")
+        with open(map_file_path) as map_file:
             map_lines = map_file.readlines()
             self.width = len(map_lines[0])
             self.height = len(map_lines)
