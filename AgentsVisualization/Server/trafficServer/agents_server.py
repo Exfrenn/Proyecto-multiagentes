@@ -243,6 +243,9 @@ def updateModel():
         try:
             city_model.step()
             currentStep += 1
+            print("Cars in map: ", city_model.carsinmap)
+            print("Cars arrived: ", city_model.carsarrived)
+            print("Total cars: ", city_model.totalcars)
             return jsonify({"message": f"Model updated to step{currentStep}"})
         except Exception as e:
             print(e)

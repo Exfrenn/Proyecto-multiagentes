@@ -82,6 +82,8 @@ class Car(CellAgent):
         self.main_state = MainState.ARRIVED
         self.navigating_state = None  # No hay sub-estado cuando está ARRIVED
         print(f"🏁 Carro llegó a destino en {self.cell.coordinate}")
+        self.model.carsarrived += 1
+        self.model.carsinmap -= 1
         self.remove()  # Auto-eliminación para liberar espacio
     
     def transition_navigating_state(self, new_state):

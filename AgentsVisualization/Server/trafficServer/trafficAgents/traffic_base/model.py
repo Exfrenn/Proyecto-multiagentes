@@ -33,6 +33,11 @@ class CityModel(Model):
         self.spawn_corners = [(0, 0), (0, 29), (29, 0), (29, 29)]  # Esquinas donde spawner carros
         self.max_cars = 10  # Número máximo de carros simultáneos
 
+        #Sistema de disp inf
+        self.carsarrived = 0
+        self.carsinmap = 0
+        self.totalcars = 0
+
         # Load the map file. The map file is a text file where each character represents an agent.
         map_file_path = os.path.join(current_dir, "..", "city_files", "2024_modified.txt")
         with open(map_file_path) as baseFile:
@@ -153,8 +158,12 @@ class CityModel(Model):
                     if self.destinations:
                         destination = self.random.choice(self.destinations)
                         Car(self, spawn_cell, destination=destination)
+                        self.carsinmap += 1
+                        self.totalcars += 1
                         print(f"🚗 Nuevo carro generado en {spawn_corner} con destino a {destination.cell.coordinate}")
                     else:
                         Car(self, spawn_cell, destination=None)
+                        self.carsinmap += 1
+                        self.totalcars += 1
                         print(f"🚗 Nuevo carro generado en {spawn_corner} sin destino")
 
