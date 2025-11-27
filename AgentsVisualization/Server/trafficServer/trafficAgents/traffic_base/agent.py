@@ -1,96 +1,65 @@
-from mesa.discrete_space import CellAgent, FixedAgent
+from mesa.experimental.cell_space import CellAgent, FixedAgent
 from enum import Enum
-
-# ============================================
-# JERARQUÍA DE ESTADOS (2 NIVELES)
-# ============================================
+import heapq
 
 class MainState(Enum):
-    """Estados principales del agente Car (Nivel 1)"""
-    ACTIVE = "active"      # El carro está activo y navegando
-    ARRIVED = "arrived"    # El carro llegó a su destino (estado final)
+    ACTIVE = "active"
+    ARRIVED = "arrived"
 
 class NavigatingState(Enum):
-    """Sub-estados de navegación cuando el carro está ACTIVE (Nivel 2)"""
-    MOVING = "moving"                      # Moviéndose normalmente
-    WAITING_TRAFFIC_LIGHT = "waiting"      # Esperando en semáforo
-    AVOIDING_COLLISION = "avoiding"        # Evitando colisión con otro carro
-    BLOCKED = "blocked"                    # Bloqueado, no puede avanzar
-    PLANNING_ROUTE = "planning"            # Planificando/recalculando ruta
+    MOVING = "moving"
+    WAITING_TRAFFIC_LIGHT = "waiting"
+    AVOIDING_COLLISION = "avoiding"
+    BLOCKED = "blocked"
+    PLANNING_ROUTE = "planning"
 
 class Car(CellAgent):
-    """
-    Agente inteligente que representa un carro.
-    Usa una máquina de estados JERÁRQUICA para tomar decisiones.
-    Objetivo: Llegar a su destino asignado.
-    """
+    """Intelligent car agent with A* pathfinding and state machine."""
+    
     def __init__(self, model, cell, destination=None):
-        """
-        Crea un nuevo agente Car inteligente.
-        Args:
-            model: Referencia al modelo
-            cell: Posición inicial del agente
-            destination: Celda de destino (agente Destination) asignada al carro
-        """
+        """Initialize car agent."""
         super().__init__(model)
         self.cell = cell
-        self.destination = destination      # Destino asignado desde el inicio
+        self.destination = destination
+        self.main_state = MainState.ACTIVE
+        self.navigating_state = NavigatingState.MOVING
+        self.orientation = "Up"
+        self.steps_taken = 0
+        self.waiting_time = 0
+        self.path = []
+        self.path_index = 0
+        self.recalculate_path_threshold = 5
         
-        # Estados jerárquicos
-        self.main_state = MainState.ACTIVE  # Estado principal (nivel 1)
-        self.navigating_state = NavigatingState.MOVING  # Sub-estado (nivel 2)
-        
-        # Orientación visual del carro (dirección hacia donde "mira")
-        self.orientation = "Up"  # Dirección inicial por defecto
-        
-        self.steps_taken = 0                # Contador de pasos
-        self.waiting_time = 0               # Tiempo esperando (para semáforos/colisiones)
-        
-        # Pathfinding
-        self.path = []                      # Lista de posiciones (x, y) del camino
-        self.path_index = 0                 # Índice actual en el path
-        
-        # Calcular path inicial si hay destino
-        if self.destination:
-            self._calculate_path()
-        
-    # ============================================
-    # MÉTODOS DE GESTIÓN DE ESTADOS
-    # ============================================
+        if self.destination is not None:
+            self.calculate_path_to_destination()
     
     def is_active(self):
-        """Verifica si el carro está en estado ACTIVE"""
+        """Check if car is active."""
         return self.main_state == MainState.ACTIVE
     
     def is_arrived(self):
-        """Verifica si el carro llegó a su destino"""
+        """Check if car arrived at destination."""
         return self.main_state == MainState.ARRIVED
     
     def is_moving(self):
-        """Verifica si el carro está moviéndose"""
+        """Check if car is moving."""
         return self.is_active() and self.navigating_state == NavigatingState.MOVING
     
     def is_waiting(self):
-        """Verifica si el carro está esperando (semáforo o colisión)"""
+        """Check if car is waiting."""
         return self.is_active() and self.navigating_state in [
             NavigatingState.WAITING_TRAFFIC_LIGHT,
             NavigatingState.AVOIDING_COLLISION
         ]
     
     def transition_to_arrived(self):
-        """Transición al estado final ARRIVED"""
+        """Transition to arrived state."""
         self.main_state = MainState.ARRIVED
-        self.navigating_state = None  # No hay sub-estado cuando está ARRIVED
-        print(f"🏁 Carro llegó a destino en {self.cell.coordinate}")
-        self.model.carsarrived += 1
-        self.model.carsinmap -= 1
-        self.remove()  # Auto-eliminación para liberar espacio
+        self.navigating_state = None
+        self.remove()
     
     def transition_navigating_state(self, new_state):
-        """
-        Transición a un nuevo sub-estado de navegación.
-        Solo válido si el estado principal es ACTIVE.
-        """
+        """Transition to new navigation state."""
         if self.is_active():
             self.navigating_state = new_state
             if new_state in [NavigatingState.WAITING_TRAFFIC_LIGHT, 
@@ -100,134 +69,133 @@ class Car(CellAgent):
             else:
                 self.waiting_time = 0
     
-    def get_current_state_description(self):
-        """Retorna una descripción legible del estado actual"""
-        if self.is_arrived():
-            return f"ARRIVED at destination"
-        else:
-            return f"ACTIVE → {self.navigating_state.value}"
     
-    def _calculate_path(self):
-        """
-        Calcula path usando A* permitiendo giros y cambios de carril inteligentes.
-        """
-        if not self.destination:
-            return
+    def heuristic(self, pos1, pos2):
+        """Calculate Manhattan distance between two positions."""
+        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+    
+    def get_valid_neighbors(self, cell):
+        """Get valid neighboring cells respecting one-way roads."""
+        neighbors = []
+        current_pos = cell.coordinate
         
-        import heapq
+        road_agent = None
+        for agent in cell.agents:
+            if isinstance(agent, Road):
+                road_agent = agent
+                break
         
-        start = self.cell.coordinate
-        goal = self.destination.cell.coordinate
+        if road_agent is None:
+            return neighbors
         
-        # A* básico
-        open_set = [(0, start)]
-        came_from = {}
-        g_score = {start: 0}
+        directions = [
+            ("Up", (0, 1)),
+            ("Down", (0, -1)),
+            ("Left", (-1, 0)),
+            ("Right", (1, 0))
+        ]
         
-        # Mapa de direcciones a deltas (dx, dy)
-        direction_deltas = {
-            "Right": (1, 0),
-            "Left": (-1, 0),
-            "Up": (0, 1),
-            "Down": (0, -1)
-        }
-        
-        # Mapa de opuestos para evitar ir en contraflujo
-        opposites = {
-            "Right": "Left",
-            "Left": "Right",
+        opposing_direction = {
             "Up": "Down",
-            "Down": "Up"
+            "Down": "Up",
+            "Left": "Right",
+            "Right": "Left"
         }
+        
+        for movement_dir, (dx, dy) in directions:
+            next_pos = (current_pos[0] + dx, current_pos[1] + dy)
+            
+            if (0 <= next_pos[0] < self.model.grid.dimensions[0] and
+                0 <= next_pos[1] < self.model.grid.dimensions[1]):
+                
+                next_cell = self.model.grid[next_pos]
+                
+                if self._has_road(next_cell):
+                    next_road = None
+                    for agent in next_cell.agents:
+                        if isinstance(agent, Road):
+                            next_road = agent
+                            break
+                    
+                    if next_road:
+                        forbidden_dir = opposing_direction[movement_dir]
+                        
+                        if next_road.direction != forbidden_dir:
+                            neighbors.append(next_pos)
+        
+        return neighbors
+    
+    def calculate_path_to_destination(self):
+        """Calculate optimal path using A* algorithm."""
+        if self.destination is None:
+            return False
+        
+        start_pos = self.cell.coordinate
+        goal_pos = self.destination.cell.coordinate
+        
+        counter = 0
+        open_set = [(0, counter, start_pos)]
+        counter += 1
+        
+        came_from = {}
+        
+        g_score = {start_pos: 0}
+        f_score = {start_pos: self.heuristic(start_pos, goal_pos)}
+        
+        open_set_hash = {start_pos}
         
         while open_set:
-            _, current = heapq.heappop(open_set)
+            current_f, _, current_pos = heapq.heappop(open_set)
+            open_set_hash.discard(current_pos)
             
-            if current == goal:
-                # Reconstruir path
-                self.path = []
-                while current in came_from:
-                    self.path.append(current)
-                    current = came_from[current]
-                self.path.reverse()
+            if current_pos == goal_pos:
+                self.path = self._reconstruct_path(came_from, current_pos)
                 self.path_index = 0
-                return
+                return True
             
-            # Obtener celda actual y su dirección
-            current_cell = self.model.grid[current]
-            current_road = next((a for a in current_cell.agents if isinstance(a, Road)), None)
+            current_cell = self.model.grid[current_pos]
+            neighbors = self.get_valid_neighbors(current_cell)
             
-            # Determinar vecinos candidatos (Frente, Izquierda, Derecha)
-            # No permitimos "Atrás" (U-turn)
-            candidates = []
-            if current_road:
-                # Vectores de movimiento
-                forward = direction_deltas.get(current_road.direction, (0,0))
+            for neighbor_pos in neighbors:
+                tentative_g_score = g_score[current_pos] + 1
                 
-                if current_road.direction in ["Right", "Left"]:
-                    sides = [(0, 1), (0, -1)] # Up, Down
-                else:
-                    sides = [(1, 0), (-1, 0)] # Right, Left
-                
-                # Agregar Frente
-                candidates.append(forward)
-                # Agregar Lados (Giros/Cambios de carril)
-                candidates.extend(sides)
-            else:
-                # Si no hay carretera definida, probar todo
-                candidates = [(0,1), (0,-1), (1,0), (-1,0)]
-
-            # Evaluar candidatos
-            for dx, dy in candidates:
-                neighbor = (current[0] + dx, current[1] + dy)
-                
-                # 1. Verificar límites
-                if not (0 <= neighbor[0] < self.model.grid.dimensions[0] and
-                        0 <= neighbor[1] < self.model.grid.dimensions[1]):
-                    continue
-                
-                # 2. Verificar contenido
-                neighbor_cell = self.model.grid[neighbor]
-                neighbor_road = next((a for a in neighbor_cell.agents if isinstance(a, Road)), None)
-                is_dest = any(isinstance(a, Destination) for a in neighbor_cell.agents)
-                
-                if not (neighbor_road or is_dest):
-                    continue
-                
-                # 3. VALIDACIÓN DE SENTIDO (Crucial)
-                # Si es una carretera, verificar que no entremos en sentido contrario
-                if neighbor_road:
-                    # Determinar la dirección de MI movimiento
-                    move_direction = None
-                    if dx == 1: move_direction = "Right"
-                    elif dx == -1: move_direction = "Left"
-                    elif dy == 1: move_direction = "Up"
-                    elif dy == -1: move_direction = "Down"
+                if neighbor_pos not in g_score or tentative_g_score < g_score[neighbor_pos]:
+                    came_from[neighbor_pos] = current_pos
+                    g_score[neighbor_pos] = tentative_g_score
+                    f_score[neighbor_pos] = tentative_g_score + self.heuristic(neighbor_pos, goal_pos)
                     
-                    # Si la carretera vecina va en dirección OPUESTA a mi movimiento, es inválido
-                    # Ej: Me muevo a la Derecha (Right) y la calle es Izquierda (<) -> CHOQUE
-                    if neighbor_road.direction == opposites.get(move_direction):
-                        continue
-                
-                # Si pasa todas las pruebas, es un vecino válido
-                tentative_g = g_score[current] + 1
-                if neighbor not in g_score or tentative_g < g_score[neighbor]:
-                    came_from[neighbor] = current
-                    g_score[neighbor] = tentative_g
-                    f_score = tentative_g + abs(neighbor[0]-goal[0]) + abs(neighbor[1]-goal[1])
-                    heapq.heappush(open_set, (f_score, neighbor))
+                    if neighbor_pos not in open_set_hash:
+                        heapq.heappush(open_set, (f_score[neighbor_pos], counter, neighbor_pos))
+                        counter += 1
+                        open_set_hash.add(neighbor_pos)
+        self.path = []
+        return False
+    
+    def _reconstruct_path(self, came_from, current_pos):
+        """Reconstruct path from start to destination."""
+        path = [current_pos]
+        while current_pos in came_from:
+            current_pos = came_from[current_pos]
+            path.append(current_pos)
+        path.reverse() 
+        
+        if path and path[0] == self.cell.coordinate:
+            path.pop(0)
+        
+        return path
+    
+    def get_next_position_from_path(self):
+        """Get next position from calculated path."""
+        if not self.path or self.path_index >= len(self.path):
+            return None
+        return self.path[self.path_index]
+    
+    def advance_path_index(self):
+        """Advance path index after moving."""
+        self.path_index += 1
         
     def perceive_environment(self):
-        """
-        Percibe el entorno del carro.
-        Returns:
-            dict con información del entorno: {
-                'road': agente Road en la celda actual,
-                'traffic_light': agente Traffic_Light en la SIGUIENTE celda,
-                'cars_ahead': lista de carros en la siguiente celda,
-                'next_cell': siguiente celda según la dirección de la carretera
-            }
-        """
+        """Perceive environment and return perception dictionary."""
         perception = {
             'road': None,
             'traffic_light': None,
@@ -235,41 +203,30 @@ class Car(CellAgent):
             'next_cell': None
         }
         
-        # Percibir carretera en la celda actual
         for agent in self.cell.agents:
             if isinstance(agent, Road):
                 perception['road'] = agent
                 break
         
-        # NUEVO: Usar path si existe
-        if self.path and self.path_index < len(self.path):
-            next_pos = self.path[self.path_index]
-            perception['next_cell'] = self.model.grid[next_pos]
+        next_pos_from_path = self.get_next_position_from_path()
+        if next_pos_from_path:
+            perception['next_cell'] = self.model.grid[next_pos_from_path]
         elif perception['road']:
-            # Fallback: usar dirección de la carretera si no hay path
             next_pos = self._calculate_next_position(perception['road'].direction)
             if next_pos:
                 perception['next_cell'] = self.model.grid[next_pos]
         
-        # Percibir agentes en la SIGUIENTE celda
         if perception['next_cell']:
             for agent in perception['next_cell'].agents:
                 if isinstance(agent, Car):
                     perception['cars_ahead'].append(agent)
                 elif isinstance(agent, Traffic_Light):
-                    # Detectar semáforo en la siguiente celda
                     perception['traffic_light'] = agent
         
         return perception
     
     def _calculate_next_position(self, direction):
-        """
-        Calcula la siguiente posición según la dirección.
-        Args:
-            direction: Dirección de movimiento ("Up", "Down", "Left", "Right")
-        Returns:
-            Tupla (x, y) con la siguiente posición, o None si está fuera del grid
-        """
+        """Calculate next position based on direction."""
         current_pos = self.cell.coordinate
         next_pos = None
         
@@ -282,7 +239,6 @@ class Car(CellAgent):
         elif direction == "Left":
             next_pos = (current_pos[0] - 1, current_pos[1])
         
-        # Verificar límites del grid
         if next_pos:
             if (next_pos[0] < 0 or next_pos[0] >= self.model.grid.dimensions[0] or
                 next_pos[1] < 0 or next_pos[1] >= self.model.grid.dimensions[1]):
@@ -291,13 +247,7 @@ class Car(CellAgent):
         return next_pos
     
     def _get_alternative_directions(self, current_direction):
-        """
-        Obtiene direcciones alternativas para cambio de carril.
-        Args:
-            current_direction: Dirección actual ("Up", "Down", "Left", "Right")
-        Returns:
-            Lista de direcciones alternativas perpendiculares a la actual
-        """
+        """Get alternative directions for lane change."""
         alternatives = {
             "Up": ["Left", "Right"],
             "Down": ["Left", "Right"],
@@ -307,28 +257,18 @@ class Car(CellAgent):
         return alternatives.get(current_direction, [])
     
     def _try_lane_change(self, perception):
-        """
-        Intenta cambiar de carril aleatoriamente.
-        Returns:
-            Celda alternativa si el cambio es posible, None si no
-        """
+        """Try to change lanes randomly."""
         if perception['road'] is None:
             return None
         
-        # Obtener direcciones alternativas
         alternatives = self._get_alternative_directions(perception['road'].direction)
-        
-        # Mezclar aleatoriamente
         self.model.random.shuffle(alternatives)
         
-        # Intentar cada dirección alternativa
         for alt_direction in alternatives:
             alt_pos = self._calculate_next_position(alt_direction)
             if alt_pos:
                 alt_cell = self.model.grid[alt_pos]
-                # Verificar que haya carretera y no haya carros
                 if self._has_road(alt_cell):
-                    # Verificar que no haya carros en esa celda
                     has_car = False
                     for agent in alt_cell.agents:
                         if isinstance(agent, Car):
@@ -340,24 +280,14 @@ class Car(CellAgent):
         return None
     
     def _has_road(self, cell):
-        """
-        Verifica si una celda tiene un agente Road.
-        Args:
-            cell: Celda a verificar
-        Returns:
-            True si hay carretera, False en caso contrario
-        """
+        """Check if cell has road agent."""
         for agent in cell.agents:
             if isinstance(agent, Road):
                 return True
         return False
     
     def _is_at_destination(self):
-        """
-        Verifica si el carro llegó a su destino.
-        Returns:
-            True si está en el destino, False en caso contrario
-        """
+        """Check if car is at destination."""
         if self.destination is None:
             return False
         
@@ -367,104 +297,47 @@ class Car(CellAgent):
         return False
     
     def decide_action(self, perception):
-        """
-        Decide la acción a tomar basándose en la JERARQUÍA DE ESTADOS y la percepción.
-        
-        Jerarquía de decisión:
-        1. Nivel Principal: ¿ACTIVE o ARRIVED?
-        2. Nivel Navegación: ¿MOVING, WAITING, AVOIDING, BLOCKED?
-        
-        Args:
-            perception: Diccionario con información del entorno
-        Returns:
-            Acción a ejecutar: 'move', 'wait', o 'stop'
-        """
-        # ============================================
-        # NIVEL 1: VERIFICAR ESTADO PRINCIPAL
-        # ============================================
-        
-        # Prioridad 1: Verificar si llegó al destino
+        """Decide action based on state and perception."""
         if self._is_at_destination():
             self.transition_to_arrived()
             return 'stop'
         
-        # Si ya llegó, no hacer nada
         if self.is_arrived():
             return 'stop'
         
-        # ============================================
-        # NIVEL 2: ESTADO ACTIVE - EVALUAR SUB-ESTADOS
-        # ============================================
+        if (not self.path or self.path_index >= len(self.path) or 
+            (self.waiting_time >= self.recalculate_path_threshold)):
+            
+            self.transition_navigating_state(NavigatingState.PLANNING_ROUTE)
+            return 'replan'
         
-        # Prioridad 2: Verificar que esté en una carretera
         if perception['road'] is None:
             self.transition_navigating_state(NavigatingState.BLOCKED)
             return 'wait'
         
-        # Prioridad 3: Verificar que haya una siguiente celda válida
         if perception['next_cell'] is None:
             self.transition_navigating_state(NavigatingState.BLOCKED)
             return 'wait'
         
-        # Prioridad 4: Verificar que la siguiente celda tenga carretera O sea mi destino
-        is_my_destination = False
-        if self.destination and perception['next_cell']:
-            for agent in perception['next_cell'].agents:
-                if agent == self.destination:
-                    is_my_destination = True
-                    break
-        
-        if not self._has_road(perception['next_cell']) and not is_my_destination:
+        if not self._has_road(perception['next_cell']):
             self.transition_navigating_state(NavigatingState.BLOCKED)
             return 'wait'
         
-        # Prioridad 5: Respetar semáforos
-        # Si hay semáforo en la siguiente celda, verificar su estado
         if perception['traffic_light'] is not None:
-            # Semáforo en ROJO (False) → Esperar
             if perception['traffic_light'].state == False:
                 self.transition_navigating_state(NavigatingState.WAITING_TRAFFIC_LIGHT)
                 return 'wait'
-            # Semáforo en VERDE (True) → Continuar verificando otras condiciones
-            # (no retornar aquí, seguir con las demás verificaciones)
         
-        # Prioridad 6: Evitar colisiones - verificar si hay carros adelante
         if len(perception['cars_ahead']) > 0:
             self.transition_navigating_state(NavigatingState.AVOIDING_COLLISION)
             return 'wait'
         
-        # ============================================
-        # DECISIÓN FINAL: TODO ESTÁ DESPEJADO
-        # ============================================
-        
-        # Si llegamos aquí:
-        # - Hay carretera válida
-        # - No hay semáforo O el semáforo está en verde
-        # - No hay carros adelante
-        # → PUEDE MOVERSE
-        
-        # DESACTIVADO: Cambio aleatorio de carril
-        # Causa problemas cuando el carro cambia a una celda sin dirección correcta
-        # TODO: Implementar cambio de carril inteligente con pathfinding
-        # if self.model.random.random() < 0.2:  # 20% de probabilidad
-        #     alt_cell = self._try_lane_change(perception)
-        #     if alt_cell is not None:
-        #         # Cambio de carril exitoso
-        #         perception['next_cell'] = alt_cell
-        
         self.transition_navigating_state(NavigatingState.MOVING)
         return 'move'
     
-    
     def execute_action(self, action, perception):
-        """
-        Ejecuta la acción decidida.
-        Args:
-            action: Acción a ejecutar ('move', 'wait', 'stop')
-            perception: Diccionario con información del entorno
-        """
+        """Execute decided action."""
         if action == 'move':
-            # Calcular orientación antes de moverse
             next_cell = perception['next_cell']
             current_pos = self.cell.coordinate
             next_pos = next_cell.coordinate
@@ -472,7 +345,6 @@ class Car(CellAgent):
             dx = next_pos[0] - current_pos[0]
             dy = next_pos[1] - current_pos[1]
             
-            # Actualizar orientación según dirección de movimiento
             if dx == 1:
                 self.orientation = "Right"
             elif dx == -1:
@@ -482,146 +354,444 @@ class Car(CellAgent):
             elif dy == -1:
                 self.orientation = "Down"
             
-            # Moverse a la siguiente celda
             self.cell = next_cell
             self.steps_taken += 1
+            self.advance_path_index()
+            self.waiting_time = 0
             
-            # NUEVO: Avanzar en el path
-            if self.path and self.path_index < len(self.path):
-                self.path_index += 1
+        elif action == 'replan':
+            success = self.calculate_path_to_destination()
+            if not success:
+                self.transition_navigating_state(NavigatingState.BLOCKED)
+            else:
+                self.waiting_time = 0
                 
         elif action == 'wait':
-            # El carro espera en su posición actual
-            pass
-        elif action == 'stop':
-            # El carro ha llegado a su destino
             pass
             
+        elif action == 'stop':
+            pass
+
     def step(self):
-        """ 
-        Paso de ejecución del agente.
-        Sigue el ciclo: Percibir -> Decidir -> Actuar
-        """
-        # 1. Percibir el entorno
+        """Execute agent step: perceive, decide, act."""
         perception = self.perceive_environment()
-        
-        # 2. Decidir acción basándose en el estado y la percepción
         action = self.decide_action(perception)
-        
-        # 3. Ejecutar la acción
         self.execute_action(action, perception)
 
+class Pedestrian(CellAgent):
+    """Pedestrian agent."""
+    
+    def __init__(self, model, cell, destination):
+        super().__init__(model)
+        self.cell = cell
+        self.destination = destination
+        self.main_state = MainState.ACTIVE
+        self.navigating_state = NavigatingState.MOVING
+        self.orientation = "Up"
+        self.steps_taken = 0
+        self.waiting_time = 0
+        self.path = []
+        self.path_index = 0
+        self.recalculate_path_threshold = 5
+        
+        if self.destination is not None:
+            self.calculate_path_to_destination()
+    
+    def is_active(self):
+        """Check if pedestrian is active."""
+        return self.main_state == MainState.ACTIVE
+    
+    def is_arrived(self):
+        """Check if pedestrian arrived at destination."""
+        return self.main_state == MainState.ARRIVED
+    
+    def is_moving(self):
+        """Check if pedestrian is moving."""
+        return self.is_active() and self.navigating_state == NavigatingState.MOVING
+    
+    def is_waiting(self):
+        """Check if pedestrian is waiting."""
+        return self.is_active() and self.navigating_state in [
+            NavigatingState.WAITING_TRAFFIC_LIGHT,
+            NavigatingState.AVOIDING_COLLISION
+        ]
+    def transition_to_arrived(self):
+        """Transition to arrived state."""
+        self.main_state = MainState.ARRIVED
+        self.navigating_state = None
+        self.remove()
+    
+    def transition_navigating_state(self, new_state):
+        """Transition to new navigation state."""
+        if self.is_active():
+            self.navigating_state = new_state
+            if new_state in [NavigatingState.WAITING_TRAFFIC_LIGHT, 
+                           NavigatingState.AVOIDING_COLLISION,
+                           NavigatingState.BLOCKED]:
+                self.waiting_time += 1
+            else:
+                self.waiting_time = 0
+    
+    def heuristic(self, pos1, pos2):
+        """Calculate Manhattan distance between two positions."""
+        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+    
+    def get_valid_neighbors(self, cell):
+        """Get valid neighboring cells for pedestrians (sidewalks, pedestrian walks, and traffic lights)."""
+        neighbors = []
+        current_pos = cell.coordinate
+        
+        # Check if current cell has sidewalk, pedestrian walk, or traffic light
+        has_walkable = False
+        for agent in cell.agents:
+            if isinstance(agent, (Sidewalk, PedestrianWalk, Traffic_Light)):
+                has_walkable = True
+                break
+        
+        if not has_walkable:
+            return neighbors
+        
+        # Pedestrians can move in all 4 directions
+        directions = [
+            (0, 1),   # Up
+            (0, -1),  # Down
+            (-1, 0),  # Left
+            (1, 0)    # Right
+        ]
+        
+        for dx, dy in directions:
+            next_pos = (current_pos[0] + dx, current_pos[1] + dy)
+            
+            # Check if position is within bounds
+            if (0 <= next_pos[0] < self.model.grid.dimensions[0] and
+                0 <= next_pos[1] < self.model.grid.dimensions[1]):
+                
+                next_cell = self.model.grid[next_pos]
+                
+                # Check if next cell has walkable surface (sidewalk, pedestrian walk, or traffic light)
+                if self._has_walkable_surface(next_cell):
+                    neighbors.append(next_pos)
+        
+        return neighbors
+    
+    def calculate_path_to_destination(self):
+        """Calculate optimal path using A* algorithm."""
+        if self.destination is None:
+            return False
+        
+        start_pos = self.cell.coordinate
+        goal_pos = self.destination.cell.coordinate
+        
+        counter = 0
+        open_set = [(0, counter, start_pos)]
+        counter += 1
+        
+        came_from = {}
+        
+        g_score = {start_pos: 0}
+        f_score = {start_pos: self.heuristic(start_pos, goal_pos)}
+        
+        open_set_hash = {start_pos}
+        
+        while open_set:
+            current_f, _, current_pos = heapq.heappop(open_set)
+            open_set_hash.discard(current_pos)
+            
+            if current_pos == goal_pos:
+                self.path = self._reconstruct_path(came_from, current_pos)
+                self.path_index = 0
+                return True
+            
+            current_cell = self.model.grid[current_pos]
+            neighbors = self.get_valid_neighbors(current_cell)
+            
+            for neighbor_pos in neighbors:
+                tentative_g_score = g_score[current_pos] + 1
+                
+                if neighbor_pos not in g_score or tentative_g_score < g_score[neighbor_pos]:
+                    came_from[neighbor_pos] = current_pos
+                    g_score[neighbor_pos] = tentative_g_score
+                    f_score[neighbor_pos] = tentative_g_score + self.heuristic(neighbor_pos, goal_pos)
+                    
+                    if neighbor_pos not in open_set_hash:
+                        heapq.heappush(open_set, (f_score[neighbor_pos], counter, neighbor_pos))
+                        counter += 1
+                        open_set_hash.add(neighbor_pos)
+    
+        self.path = []
+        return False
+    
+    def _reconstruct_path(self, came_from, current_pos):
+        """Reconstruct path from start to destination."""
+        path = [current_pos]
+        while current_pos in came_from:
+            current_pos = came_from[current_pos]
+            path.append(current_pos)
+        path.reverse() 
+        
+        if path and path[0] == self.cell.coordinate:
+            path.pop(0)
+        
+        return path
+    
+    def get_next_position_from_path(self):
+        """Get next position from calculated path."""
+        if not self.path or self.path_index >= len(self.path):
+            return None
+        return self.path[self.path_index]
+    
+    def advance_path_index(self):
+        """Advance path index after moving."""
+        self.path_index += 1
+
+    def perceive_environment(self):
+        """Perceive environment and return perception dictionary."""
+        perception = {
+            'sidewalk': None,
+            'pedestrian_walk': None,
+            'traffic_light': None,
+            'pedestrians_ahead': [],
+            'cars_ahead': [],
+            'next_cell': None
+        }
+        
+        for agent in self.cell.agents:
+            if isinstance(agent, Sidewalk):
+                perception['sidewalk'] = agent
+                break
+        
+        for agent in self.cell.agents:
+            if isinstance(agent, PedestrianWalk):
+                perception['pedestrian_walk'] = agent
+                break
+        for agent in self.cell.agents:
+            if isinstance(agent, Traffic_Light):
+                perception['traffic_light'] = agent
+                break
+
+        next_pos_from_path = self.get_next_position_from_path()
+        if next_pos_from_path:
+            perception['next_cell'] = self.model.grid[next_pos_from_path]
+        elif perception['sidewalk']:
+            next_pos = self._calculate_next_position(perception['sidewalk'].direction)
+            if next_pos:
+                perception['next_cell'] = self.model.grid[next_pos]
+        
+        if perception['next_cell']:
+            for agent in perception['next_cell'].agents:
+                if isinstance(agent, Pedestrian):
+                    perception['pedestrians_ahead'].append(agent)
+                elif isinstance(agent, Car):
+                    perception['cars_ahead'].append(agent)
+                elif isinstance(agent, Traffic_Light):
+                    perception['traffic_light'] = agent
+        
+        return perception
+    
+    def _calculate_next_position(self, direction):
+        """Calculate next position based on direction."""
+        current_pos = self.cell.coordinate
+        next_pos = None
+        
+        if direction == "Up":
+            next_pos = (current_pos[0], current_pos[1] + 1)
+        elif direction == "Down":
+            next_pos = (current_pos[0], current_pos[1] - 1)
+        elif direction == "Right":
+            next_pos = (current_pos[0] + 1, current_pos[1])
+        elif direction == "Left":
+            next_pos = (current_pos[0] - 1, current_pos[1])
+        
+        if next_pos:
+            if (next_pos[0] < 0 or next_pos[0] >= self.model.grid.dimensions[0] or
+                next_pos[1] < 0 or next_pos[1] >= self.model.grid.dimensions[1]):
+                return None
+        
+        return next_pos
+    
+    def _has_walkable_surface(self, cell):
+        """Check if cell has sidewalk, pedestrian walk, or traffic light."""
+        for agent in cell.agents:
+            if isinstance(agent, (Sidewalk, PedestrianWalk, Traffic_Light)):
+                return True
+        return False
+    
+    def _is_at_destination(self):
+        """Check if pedestrian is at destination."""
+        if self.destination is None:
+            return False
+        
+        for agent in self.cell.agents:
+            if isinstance(agent, Destination) and agent == self.destination:
+                return True
+        return False
+    
+    def decide_action(self, perception):
+        """Decide action based on state and perception."""
+        if self._is_at_destination():
+            self.transition_to_arrived()
+            return 'stop'
+        
+        if self.is_arrived():
+            return 'stop'
+        
+        # Recalculate path if needed
+        if (not self.path or self.path_index >= len(self.path) or 
+            (self.waiting_time >= self.recalculate_path_threshold)):
+            
+            if self.waiting_time >= self.recalculate_path_threshold:
+                print(f"Pedestrian en {self.cell.coordinate}: Recalculando ruta (bloqueado {self.waiting_time} pasos)")
+            
+            self.transition_navigating_state(NavigatingState.PLANNING_ROUTE)
+            return 'replan'
+        
+        # Check if current cell has walkable surface
+        if not self._has_walkable_surface(self.cell):
+            self.transition_navigating_state(NavigatingState.BLOCKED)
+            return 'wait'
+        
+        # Check if next cell exists
+        if perception['next_cell'] is None:
+            self.transition_navigating_state(NavigatingState.BLOCKED)
+            return 'wait'
+        
+        # Check if next cell has walkable surface
+        if not self._has_walkable_surface(perception['next_cell']):
+            self.transition_navigating_state(NavigatingState.BLOCKED)
+            return 'wait'
+        
+        # Check traffic light - pedestrians can cross when red (cars stopped)
+        if perception['traffic_light'] is not None:
+            # If light is green (True) = cars moving, pedestrians must wait
+            if perception['traffic_light'].state == True:
+                self.transition_navigating_state(NavigatingState.WAITING_TRAFFIC_LIGHT)
+                return 'wait'
+            # If light is red (False) = cars stopped, pedestrians can cross
+            # Continue to other checks below
+        
+        # Check for cars - important for pedestrian walks (crosswalks) without traffic lights
+        # Or as safety check even when traffic light is red
+        if len(perception['cars_ahead']) > 0:
+            self.transition_navigating_state(NavigatingState.AVOIDING_COLLISION)
+            return 'wait'
+        
+        # Avoid collision with other pedestrians
+        if len(perception['pedestrians_ahead']) > 0:
+            self.transition_navigating_state(NavigatingState.AVOIDING_COLLISION)
+            return 'wait'
+        
+        # Move forward
+        self.transition_navigating_state(NavigatingState.MOVING)
+        return 'move'
+    
+    def execute_action(self, action, perception):
+        """Execute decided action."""
+        if action == 'move':
+            next_cell = perception['next_cell']
+            current_pos = self.cell.coordinate
+            next_pos = next_cell.coordinate
+            
+            dx = next_pos[0] - current_pos[0]
+            dy = next_pos[1] - current_pos[1]
+            
+            if dx == 1:
+                self.orientation = "Right"
+            elif dx == -1:
+                self.orientation = "Left"
+            elif dy == 1:
+                self.orientation = "Up"
+            elif dy == -1:
+                self.orientation = "Down"
+            
+            # Move to next cell
+            self.cell = next_cell
+            self.steps_taken += 1
+            self.advance_path_index()
+            self.waiting_time = 0
+            
+        elif action == 'replan':
+            success = self.calculate_path_to_destination()
+            if not success:
+                self.transition_navigating_state(NavigatingState.BLOCKED)
+            else:
+                self.waiting_time = 0
+                
+        elif action == 'wait':
+            pass
+            
+        elif action == 'stop':
+            pass
+    
+    def step(self):
+        """Execute agent step: perceive, decide, act."""
+        perception = self.perceive_environment()
+        action = self.decide_action(perception)
+        self.execute_action(action, perception)
+
+
 class Traffic_Light(FixedAgent):
-    """
-    Traffic light. Where the traffic lights are in the grid.
-    """
+    """Traffic light agent."""
+    
     def __init__(self, model, cell, state = False, timeToChange = 10):
-        """
-        Creates a new Traffic light.
-        Args:
-            model: Model reference for the agent
-            cell: The initial position of the agent
-            state: Whether the traffic light is green or red
-            timeToChange: After how many step should the traffic light change color 
-        """
+        """Initialize traffic light."""
         super().__init__(model)
         self.cell = cell
         self.state = state
         self.timeToChange = timeToChange
-        self.time_remaining = timeToChange  # Tiempo restante hasta el cambio
+        self.time_remaining = timeToChange
 
     def step(self):
-        """ 
-        To change the state (green or red) of the traffic light in case you consider the time to change of each traffic light.
-        """
-        # Calcular tiempo restante
+        """Change traffic light state."""
         steps_since_change = self.model.steps % self.timeToChange
         self.time_remaining = self.timeToChange - steps_since_change
         
-        # Cambiar estado cuando corresponda
         if self.model.steps % self.timeToChange == 0:
             self.state = not self.state
             self.time_remaining = self.timeToChange
     
     def get_seconds_remaining(self):
-        """
-        Retorna el número de steps antes del próximo cambio de estado.
-        Útil para que los carros tomen decisiones basadas en el tiempo restante.
-        """
+        """Get remaining steps until next state change."""
         return self.time_remaining
 
-
 class Destination(FixedAgent):
-    """
-    Destination agent. Where each car should go.
-    """
+    """Destination agent."""
+    
     def __init__(self, model, cell):
-        """
-        Creates a new destination agent
-        Args:
-            model: Model reference for the agent
-            cell: The initial position of the agent
-        """
+        """Initialize destination."""
         super().__init__(model)
         self.cell = cell
 
 class Obstacle(FixedAgent):
-    """
-    Obstacle agent. Just to add obstacles to the grid.
-    """
+    """Obstacle agent."""
+    
     def __init__(self, model, cell):
-        """
-        Creates a new obstacle.
-        
-        Args:
-            model: Model reference for the agent
-            cell: The initial position of the agent
-        """
+        """Initialize obstacle."""
         super().__init__(model)
         self.cell = cell
 
 class Road(FixedAgent):
-    """
-    Road agent. Determines where the cars can move, and in which direction.
-    """
+    """Road agent with direction."""
+    
     def __init__(self, model, cell, direction= "Left"):
-        """
-        Creates a new road.
-        Args:
-            model: Model reference for the agent
-            cell: The initial position of the agent
-        """
+        """Initialize road."""
         super().__init__(model)
         self.cell = cell
         self.direction = direction
 
 class Sidewalk(FixedAgent):
-    """
-    Sidewalk agent. Determines where the pedestrians can move, and in which direction.
-    """
+    """Sidewalk agent."""
+    
     def __init__(self, model, cell, direction= "Left"):
-        """
-        Creates a new sidewalk.
-        Args:
-            model: Model reference for the agent
-            cell: The initial position of the agent
-        """
+        """Initialize sidewalk."""
         super().__init__(model)
         self.cell = cell
         self.direction = direction
 
 class PedestrianWalk(FixedAgent):
-    """
-    PedestrianWalk agent. Determines where the pedestrians can move, and in which direction.
-    """
+    """Pedestrian walk agent."""
+    
     def __init__(self, model, cell, direction= "Left"):
-        """
-        Creates a new PedestrianWalk.
-        Args:
-            model: Model reference for the agent
-            cell: The initial position of the agent
-        """
+        """Initialize pedestrian walk."""
         super().__init__(model)
         self.cell = cell
         self.direction = direction
-
