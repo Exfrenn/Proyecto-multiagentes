@@ -73,9 +73,6 @@ async function getAgents() {
             // Parse the response as JSON
             let result = await response.json();
 
-            // Log the agent positions
-            //console.log("getAgents positions: ", result.agentpos)
-
             // Check if the agents array is empty
             if (agents.length == 0) {
                 // Create new agents and add them to the agents array
@@ -85,9 +82,6 @@ async function getAgents() {
                     newAgent['oldPosArray'] = newAgent.posArray;
                     agents.push(newAgent);
                 }
-                // Log the agents array
-                //console.log("Agents:", agents);
-
             } else {
                 // Update the positions of existing agents
                 for (const agent of result.agentpos) {
@@ -98,6 +92,12 @@ async function getAgents() {
                         // Update the agent's position
                         current_agent.oldPosArray = current_agent.posArray;
                         current_agent.position = { x: agent.x, y: agent.y, z: agent.z };
+                    } else {
+                        // NEW AGENT: Create and add to the array
+                        // console.log(`🆕 New agent detected: ${agent.id}`);
+                        const newAgent = new Object3D(agent.id, [agent.x, agent.y, agent.z]);
+                        newAgent['oldPosArray'] = newAgent.posArray;
+                        agents.push(newAgent);
                     }
                 }
             }
@@ -130,8 +130,6 @@ async function getObstacles() {
                 const newObstacle = new Object3D(obstacle.id, [obstacle.x, obstacle.y, obstacle.z]);
                 obstacles.push(newObstacle);
             }
-            // Log the obstacles array
-            //console.log("Obstacles:", obstacles);
         } else {
             let result = await response.json();
             console.log("Error:", result.message, result.error);

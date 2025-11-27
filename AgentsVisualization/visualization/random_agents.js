@@ -21,7 +21,7 @@ import { Camera3D } from '../libs/camera3d';
 import {
   agents, obstacles, initAgentsModel,
   update, getAgents, getObstacles
-} from '../libs/api_connection.js';
+} from '../libs/api_connection_random.js';
 
 // Define the shader code, using GLSL 3.00
 import vsGLSL from '../assets/shaders/vs_color.glsl?raw';

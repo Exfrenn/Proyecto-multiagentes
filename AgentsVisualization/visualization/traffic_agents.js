@@ -29,19 +29,6 @@ import fsGLSL from '../assets/shaders/fs_color.glsl?raw';
 
 const scene = new Scene3D();
 
-/*
-// Variable for the scene settings
-const settings = {
-    // Speed in degrees
-    rotationSpeed: {
-        x: 0,
-        y: 0,
-        z: 0,
-    },
-};
-*/
-
-
 // Global variables
 let colorProgramInfo = undefined;
 let gl = undefined;
@@ -49,6 +36,12 @@ const duration = 1000; // ms
 let elapsed = 0;
 let then = 0;
 
+// Store geometry for dynamic agents
+const agentGeometry = {
+    arrays: null,
+    bufferInfo: null,
+    vao: null
+};
 
 // Main function is async to be able to make the requests
 async function main() {
@@ -82,8 +75,6 @@ async function main() {
     drawScene();
 }
 
-
-
 function setupScene() {
     let camera = new Camera3D(0,
         10,             // Distance to target
@@ -103,16 +94,10 @@ function setupObjects(scene, gl, programInfo) {
     const baseCube = new Object3D(-1);
     baseCube.prepareVAO(gl, programInfo);
 
-    /*
-    // A scaled cube to use as the ground
-    const ground = new Object3D(-3, [14, 0, 14]);
-    ground.arrays = baseCube.arrays;
-    ground.bufferInfo = baseCube.bufferInfo;
-    ground.vao = baseCube.vao;
-    ground.scale = {x: 50, y: 0.1, z: 50};
-    ground.color = [0.6, 0.6, 0.6, 1];
-    scene.addObject(ground);
-    */
+    // Save geometry for later use
+    agentGeometry.arrays = baseCube.arrays;
+    agentGeometry.bufferInfo = baseCube.bufferInfo;
+    agentGeometry.vao = baseCube.vao;
 
     // Copy the properties of the base objects
     for (const agent of agents) {
@@ -132,7 +117,30 @@ function setupObjects(scene, gl, programInfo) {
         agent.color = [0.7, 0.7, 0.7, 1.0];
         scene.addObject(agent);
     }
+}
 
+function checkForNewCars() {
+    // Use the global geometry
+    if (!agentGeometry.vao) {
+        console.warn("Agent geometry not initialized");
+        return;
+    }
+
+    for (const agent of agents) {
+        const existsInScene = scene.objects.find(obj => obj.id == agent.id);
+        if (!existsInScene) {
+            // Copy visual properties from global geometry
+            agent.arrays = agentGeometry.arrays;
+            agent.bufferInfo = agentGeometry.bufferInfo;
+            agent.vao = agentGeometry.vao;
+
+            // Set appearance (matching setupObjects)
+            agent.scale = { x: 0.5, y: 0.5, z: 0.5 };
+            agent.color = [1.0, 0.0, 1.0, 1.0]; // Magenta for cars
+
+            scene.addObject(agent);
+        }
+    }
 }
 
 // Draw an object with its corresponding transformations
@@ -140,16 +148,6 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     // Prepare the vector for translation and scale
     let v3_tra = object.posArray;
     let v3_sca = object.scaArray;
-
-    /*
-    // Animate the rotation of the objects
-    object.rotDeg.x = (object.rotDeg.x + settings.rotationSpeed.x * fract) % 360;
-    object.rotDeg.y = (object.rotDeg.y + settings.rotationSpeed.y * fract) % 360;
-    object.rotDeg.z = (object.rotDeg.z + settings.rotationSpeed.z * fract) % 360;
-    object.rotRad.x = object.rotDeg.x * Math.PI / 180;
-    object.rotRad.y = object.rotDeg.y * Math.PI / 180;
-    object.rotRad.z = object.rotDeg.z * Math.PI / 180;
-    */
 
     // Create the individual transform matrices
     const scaMat = M4.scale(v3_sca);
@@ -213,6 +211,7 @@ async function drawScene() {
     if (elapsed >= duration) {
         elapsed = 0;
         await update();
+        checkForNewCars();
     }
 
     requestAnimationFrame(drawScene);
