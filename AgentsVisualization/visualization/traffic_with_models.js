@@ -48,7 +48,7 @@ async function main() {
     colorProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
 
 
-    const carArrays = await loadModel('../assets/models/AddedModels/car.obj');
+    const carArrays = await loadModel('../assets/models/car-2024-301.obj');
     const carModel = createBufferAndVAO(gl, colorProgramInfo, carArrays);
 
     // Guardar para uso posterior
