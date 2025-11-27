@@ -240,8 +240,8 @@ async function getPedestrians() {
         if (response.ok) {
             let result = await response.json();
 
-            // result MUST contain: result.pedestrianpos
-            const pedList = result.pedestrianpos;
+            // result MUST contain: result.Pedestrianpos
+            const pedList = result.Pedestrianpos;
 
             if (pedestrians.length === 0) {
                 // First time → create Object3D for all pedestrians
@@ -290,6 +290,8 @@ async function update() {
         if (response.ok) {
             // Retrieve the updated agent positions
             await getAgents();
+            // Retrieve the updated pedestrian positions
+            await getPedestrians();
             // Log a message indicating that the agents have been updated
             //console.log("Updated agents");
         } else {
