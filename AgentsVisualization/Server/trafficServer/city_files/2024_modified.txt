@@ -2,7 +2,7 @@ v<<<<<<<<<<<<<<<<s<<<<<<<<<<<<
 vv<<<<<<<<<<<<<<<s<<<<<<<<<<<^
 vv##^###^###vv#SS###########^^
 vv##^###^###vv#^^<<<<<<<<<<<^^
-vv>>>>>>>>>>vv#^^<D<<<<<<<<<^^
+vv>>>>>>>>>>vv#^^<<<<<<<<<<<^^
 vv##v#v#^#v#vv#^^###########^^
 vv##v#v#^#v#vv#^^>>>>>>>>>>C^^
 vv<<<<<<<<v<vv#^^>>>>>>>>>>C^^
@@ -16,12 +16,12 @@ vvB########vv###^^B########B^^
 vvBBBBBBBBBvv###^^BBBBBBBBBB^^
 vv>>>s>>>>C>>>>>>>C>>>>>>>>s^^
 vv>>>s>>>>C>>>>>>>C>>>>>>>>s^^
-vv#CC#SSBBBBvv#^^BBBBCCBBBBBSS
+vv#CCBSSPBBBvv#^^BBBBCCBBBBBSS
 vv#vv#^^B##Bvv#^^B##BvvB###B^^
 vv#vv#^^B##Bvv#^^B##BvvB###B^^
 vv#vv#^^BBBBCC#CCBBBBCCBBBBB^^
 vv#vv#^^C<<Cvv<^^C<<CvvC<<<C^^
-vv#vv#^^C<<Cvv<^^C<<CvvC<<<C^^
+vv#vv#^^C<DCvv<^^C<<CvvC<<<C^^
 vv#vv#^^BBBBCC#CCB#BBCCBBBBB^^
 vv#vv#^^###Bvv#^^B##BvvB###B^^
 vv#vv#^^B##Bvv#^^B##BvvB###B^^

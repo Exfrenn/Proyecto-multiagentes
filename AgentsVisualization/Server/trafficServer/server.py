@@ -17,6 +17,9 @@ def agent_portrayal(agent):
 
     if isinstance(agent, Road):
         portrayal["color"] = "#aaa"
+    
+    if isinstance(agent, Pedestrian):
+        portrayal["color"] = "yellow"
 
     if isinstance(agent, Destination):
         portrayal["color"] = "lightgreen"
@@ -44,7 +47,7 @@ def post_process(ax):
 
 
 model_params = {
-    "N": 5,
+    "initial_agents_count": 5,
     "seed": {
         "type": "InputText",
         "value": 42,
@@ -60,7 +63,7 @@ model_params = {
     },
 }
 
-model = CityModel(model_params["N"], spawn_interval=model_params["spawn_interval"]["value"])
+model = CityModel(model_params["initial_agents_count"], spawn_interval=model_params["spawn_interval"]["value"])
 
 
 space_component = make_space_component(

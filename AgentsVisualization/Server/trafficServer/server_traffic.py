@@ -30,7 +30,6 @@ def initModel():
 
         print(request.form)
 
-        # Create the model using the parameters sent by Unity
         randomModel = CityModel(number_agents)
 
         # Return a message to Unity saying that the model was created successfully
