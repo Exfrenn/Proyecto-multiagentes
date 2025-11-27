@@ -1,36 +1,34 @@
-# TC2008B. Sistemas Multiagentes y Gráficas Computacionales
-# Python flask server to interact with Unity. Based on the code provided by Sergio Ruiz.
-# Octavio Navarro. October 2023 
-
+from threading import current_thread
 from flask import Flask, request, jsonify
-#from randomAgents.model import RandomModel
-#from randomAgents.agent import RandomAgent, ObstacleAgent
+from flask_cors import CORS, cross_origin
 from trafficBase.model import CityModel
-from trafficBase.agent import Road, Traffic_Light, Obstacle, Destination
+from trafficBase.agent import Car, Road, Traffic_Light, Obstacle, Destination, Sidewalk, PedestrianWalk
 
-# Size of the board:
-number_agents = 10
-width = 28
-height = 28
-randomModel = None
+noa = 10
+width = 30
+height = 30
+city_model = None
 currentStep = 0
 
-# This application will be used to interact with Unity
-app = Flask("Traffic example")
+app = Flask("Traffic Base")
+CORS(app, origins = ["http://localhost"])
 
-# This route will be used to send the parameters of the simulation to the server.
-# The servers expects a POST request with the parameters in a form.
-@app.route('/init', methods=['POST'])
+@app.route('/init', methods = ['GET', 'POST'])
+@cross_origin()
 def initModel():
-    global currentStep, randomModel, number_agents, width, height
+    global currentStep, city_model, noa
 
     if request.method == 'POST':
-        number_agents = int(request.form.get('NAgents'))
+        try:
+            noa = int(request.json['NAgents'])
+            city_model = CityModel(N=noa)
+            currentStep = 0
+        except Exception as e:
+            print(e)
+            return jsonify({"message": "Error initializing model", "error": str(e)}), 500
+    elif request.method == 'GET':
+        city_model = CityModel(N=noa)
         currentStep = 0
-
-        print(request.form)
-
-        randomModel = CityModel(number_agents)
 
         # Return a message to Unity saying that the model was created successfully
         return jsonify({"message":"Parameters recieved, model initiated."})
@@ -70,6 +68,5 @@ def initModel():
         #currentStep += 1
         #return jsonify({'message':f'Model updated to step {currentStep}.', 'currentStep':currentStep})
 
-if __name__=='__main__':
-    # Run the flask server in port 8585
+if __name__ == "__main__":
     app.run(host="localhost", port=8585, debug=True)
