@@ -47,9 +47,8 @@ async function main() {
     // Prepare the program with the shaders
     colorProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
 
-    // 🚗 CARGAR MODELO DEL AUTO
-    console.log("🚗 Loading car model...");
-    const carArrays = await loadModel('../assets/models/car-2024-301.obj');
+
+    const carArrays = await loadModel('../assets/models/AddedModels/car.obj');
     const carModel = createBufferAndVAO(gl, colorProgramInfo, carArrays);
 
     // Guardar para uso posterior
