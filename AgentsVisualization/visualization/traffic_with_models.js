@@ -301,7 +301,6 @@ function setupViewProjection(gl) {
 
 // Setup a ui.
 function setupUI() {
-    /*
     const gui = new GUI();
   
     // Settings for the animation
@@ -312,7 +311,6 @@ function setupUI() {
         .decimals(2)
     animFolder.add( settings.rotationSpeed, 'z', 0, 360)
         .decimals(2)
-    */
 }
 
 //Load a .obj model from a file path

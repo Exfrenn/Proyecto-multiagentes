@@ -6,7 +6,8 @@
     "#" : "Obstacle",
     "v" : "Down",
     "^" : "Up",
-    "D" : "Destination",
+    "D" : "CarDestination",
+    "P" : "PedestrianDestination",
     "B" : "Sidewalk",
     "C" : "PedestrianWalk"
 }
