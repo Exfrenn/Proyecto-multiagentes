@@ -1,8 +1,7 @@
-from threading import current_thread
 from flask import Flask, request, jsonify
 from flask_cors import CORS, cross_origin
 from trafficAgents.traffic_base.model import CityModel
-from trafficAgents.traffic_base.agent import Car, Road, Traffic_Light, Obstacle, Destination, Sidewalk, PedestrianWalk
+from trafficAgents.traffic_base.agent import Car, Road, Traffic_Light, Obstacle, Destination, Sidewalk, PedestrianWalk, Pedestrian
 
 noa = 10
 width = 30
@@ -21,13 +20,13 @@ def initModel():
     if request.method == 'POST':
         try:
             noa = int(request.json['NAgents'])
-            city_model = CityModel(N=noa)
+            city_model = CityModel(initial_agents_count=noa)
             currentStep = 0
         except Exception as e:
             print(e)
             return jsonify({"message": "Error initializing model", "error": str(e)}), 500
     elif request.method == 'GET':
-        city_model = CityModel(N=noa)
+        city_model = CityModel(initial_agents_count=noa)
         currentStep = 0
 
     print(f"Model parameters: {noa,width,height}")
@@ -52,7 +51,7 @@ def getAgents():
         ]
 
         agentPositions = [
-            {"id": str(a.unique_id), "x":coordinate[0], "y":1, "z":coordinate[1]}
+            {"id": str(a.unique_id), "x":coordinate[0], "y":1, "z":coordinate[1], "orientation": a.orientation}
             for coordinate, a in agents
         ]
 
@@ -108,7 +107,7 @@ def getTrafficLights():
             ]
 
             TrafficLightPositions = [
-                {"id": str(a.unique_id), "x":coordinate[0], "y":1, "z":coordinate[1]}
+                {"id": str(a.unique_id), "x":coordinate[0], "y":1, "z":coordinate[1], "state": a.state, "time_remaining": a.time_remaining}
                 for (coordinate, a) in agents
             ]
 
@@ -232,6 +231,34 @@ def getPedestrianWalks():
             return jsonify({"message": "Error getting pedestrian walks positions", "error": str(e)}), 500
 
 
+@app.route("/getPedestrians", methods = ['GET'])
+@cross_origin()
+def getPedestrians():
+    global city_model
+    
+    if request.method == "GET":
+        try:
+            PedestrianCells = city_model.grid.all_cells.select(
+                lambda cell: any(isinstance(obj, Pedestrian) for obj in cell.agents)
+            ).cells
+
+            agents = [
+                (cell.coordinate, agent)
+                for cell in PedestrianCells
+                for agent in cell.agents
+                if isinstance(agent, Pedestrian)
+            ]
+
+            PedestrianPositions = [
+                {"id": str(a.unique_id), "x":coordinate[0], "y":1, "z":coordinate[1], "orientation": a.orientation}
+                for (coordinate, a) in agents
+            ]
+
+            return jsonify({"Pedestrianpos": PedestrianPositions})
+        except Exception as e:
+            print(e)
+            return jsonify({"message": "Error getting pedestrians positions", "error": str(e)}), 500
+
 @app.route("/update", methods = ["GET"])
 @cross_origin()
 def updateModel():
@@ -243,10 +270,34 @@ def updateModel():
         try:
             city_model.step()
             currentStep += 1
-            print("Cars in map: ", city_model.carsinmap)
-            print("Cars arrived: ", city_model.carsarrived)
-            print("Total cars: ", city_model.totalcars)
-            return jsonify({"message": f"Model updated to step{currentStep}"})
+            
+            # Calculate statistics from agents
+            active_cars = sum(1 for agent in city_model.agents if isinstance(agent, Car) and agent.is_active())
+            arrived_cars = sum(1 for agent in city_model.agents if isinstance(agent, Car) and agent.is_arrived())
+            total_cars = sum(1 for agent in city_model.agents if isinstance(agent, Car))
+            
+            active_pedestrians = sum(1 for agent in city_model.agents if isinstance(agent, Pedestrian) and agent.is_active())
+            arrived_pedestrians = sum(1 for agent in city_model.agents if isinstance(agent, Pedestrian) and agent.is_arrived())
+            total_pedestrians = sum(1 for agent in city_model.agents if isinstance(agent, Pedestrian))
+            
+            print("Active cars: ", active_cars)
+            print("Arrived cars: ", arrived_cars)
+            print("Total cars: ", total_cars)
+            print("Active pedestrians: ", active_pedestrians)
+            print("Arrived pedestrians: ", arrived_pedestrians)
+            print("Total pedestrians: ", total_pedestrians)
+            
+            return jsonify({
+                "message": f"Model updated to step {currentStep}",
+                "stats": {
+                    "active_cars": active_cars,
+                    "arrived_cars": arrived_cars,
+                    "total_cars": total_cars,
+                    "active_pedestrians": active_pedestrians,
+                    "arrived_pedestrians": arrived_pedestrians,
+                    "total_pedestrians": total_pedestrians
+                }
+            })
         except Exception as e:
             print(e)
             return jsonify({"message": "Error updating model", "error": str(e)}), 500
