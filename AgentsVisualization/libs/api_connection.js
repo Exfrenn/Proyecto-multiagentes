@@ -15,6 +15,7 @@ const agent_server_uri = "http://localhost:8585/";
 
 // Initialize arrays to store agents and obstacles
 const agents = [];
+const pedestrians = [];
 const obstacles = [];
 const trafficLights = [];
 const roads = [];
@@ -231,6 +232,52 @@ async function getPedestrianWalks() {
     }
 }
 
+async function getPedestrians() {
+    try {
+        // Call the correct endpoint
+        let response = await fetch(agent_server_uri + "getPedestrians");
+
+        if (response.ok) {
+            let result = await response.json();
+
+            // result MUST contain: result.pedestrianpos
+            const pedList = result.pedestrianpos;
+
+            if (pedestrians.length === 0) {
+                // First time → create Object3D for all pedestrians
+                for (const ped of pedList) {
+                    const newPed = new Object3D(ped.id, [ped.x, ped.y, ped.z]);
+                    newPed.oldPosArray = newPed.posArray;
+                    pedestrians.push(newPed);
+                }
+            } else {
+                // Update positions or add new pedestrian
+                for (const ped of pedList) {
+                    let currentPed = pedestrians.find((p) => p.id == ped.id);
+
+                    if (currentPed) {
+                        // Update existing pedestrian
+                        currentPed.oldPosArray = currentPed.posArray;
+                        currentPed.position = { x: ped.x, y: ped.y, z: ped.z };
+                    } else {
+                        // Add new pedestrian dynamically
+                        const newPed = new Object3D(ped.id, [ped.x, ped.y, ped.z]);
+                        newPed.oldPosArray = newPed.posArray;
+                        pedestrians.push(newPed);
+                    }
+                }
+            }
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
+        }
+
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+
 /*
  * Updates the agent positions by sending a request to the agent server.
  */
@@ -256,4 +303,4 @@ async function update() {
     }
 }
 
-export { agents, obstacles, trafficLights, roads, destinations, sidewalks, pedestrianWalks, initAgentsModel, update, getAgents, getObstacles, getTrafficLights, getRoads, getDestinations, getSidewalks, getPedestrianWalks };
+export { agents, pedestrians, obstacles, trafficLights, roads, destinations, sidewalks, pedestrianWalks, initAgentsModel, update, getAgents, getObstacles, getTrafficLights, getRoads, getDestinations, getSidewalks, getPedestrianWalks, getPedestrians };
