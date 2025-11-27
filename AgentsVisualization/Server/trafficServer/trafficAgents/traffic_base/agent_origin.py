@@ -46,14 +46,6 @@ class Car(CellAgent):
         self.steps_taken = 0                # Contador de pasos
         self.waiting_time = 0               # Tiempo esperando (para semáforos/colisiones)
         
-        # Pathfinding
-        self.path = []                      # Lista de posiciones (x, y) del camino
-        self.path_index = 0                 # Índice actual en el path
-        
-        # Calcular path inicial si hay destino
-        if self.destination:
-            self._calculate_path()
-        
     # ============================================
     # MÉTODOS DE GESTIÓN DE ESTADOS
     # ============================================
@@ -104,116 +96,6 @@ class Car(CellAgent):
             return f"ARRIVED at destination"
         else:
             return f"ACTIVE → {self.navigating_state.value}"
-    
-    def _calculate_path(self):
-        """
-        Calcula path usando A* permitiendo giros y cambios de carril inteligentes.
-        """
-        if not self.destination:
-            return
-        
-        import heapq
-        
-        start = self.cell.coordinate
-        goal = self.destination.cell.coordinate
-        
-        # A* básico
-        open_set = [(0, start)]
-        came_from = {}
-        g_score = {start: 0}
-        
-        # Mapa de direcciones a deltas (dx, dy)
-        direction_deltas = {
-            "Right": (1, 0),
-            "Left": (-1, 0),
-            "Up": (0, 1),
-            "Down": (0, -1)
-        }
-        
-        # Mapa de opuestos para evitar ir en contraflujo
-        opposites = {
-            "Right": "Left",
-            "Left": "Right",
-            "Up": "Down",
-            "Down": "Up"
-        }
-        
-        while open_set:
-            _, current = heapq.heappop(open_set)
-            
-            if current == goal:
-                # Reconstruir path
-                self.path = []
-                while current in came_from:
-                    self.path.append(current)
-                    current = came_from[current]
-                self.path.reverse()
-                self.path_index = 0
-                return
-            
-            # Obtener celda actual y su dirección
-            current_cell = self.model.grid[current]
-            current_road = next((a for a in current_cell.agents if isinstance(a, Road)), None)
-            
-            # Determinar vecinos candidatos (Frente, Izquierda, Derecha)
-            # No permitimos "Atrás" (U-turn)
-            candidates = []
-            if current_road:
-                # Vectores de movimiento
-                forward = direction_deltas.get(current_road.direction, (0,0))
-                
-                if current_road.direction in ["Right", "Left"]:
-                    sides = [(0, 1), (0, -1)] # Up, Down
-                else:
-                    sides = [(1, 0), (-1, 0)] # Right, Left
-                
-                # Agregar Frente
-                candidates.append(forward)
-                # Agregar Lados (Giros/Cambios de carril)
-                candidates.extend(sides)
-            else:
-                # Si no hay carretera definida, probar todo
-                candidates = [(0,1), (0,-1), (1,0), (-1,0)]
-
-            # Evaluar candidatos
-            for dx, dy in candidates:
-                neighbor = (current[0] + dx, current[1] + dy)
-                
-                # 1. Verificar límites
-                if not (0 <= neighbor[0] < self.model.grid.dimensions[0] and
-                        0 <= neighbor[1] < self.model.grid.dimensions[1]):
-                    continue
-                
-                # 2. Verificar contenido
-                neighbor_cell = self.model.grid[neighbor]
-                neighbor_road = next((a for a in neighbor_cell.agents if isinstance(a, Road)), None)
-                is_dest = any(isinstance(a, Destination) for a in neighbor_cell.agents)
-                
-                if not (neighbor_road or is_dest):
-                    continue
-                
-                # 3. VALIDACIÓN DE SENTIDO (Crucial)
-                # Si es una carretera, verificar que no entremos en sentido contrario
-                if neighbor_road:
-                    # Determinar la dirección de MI movimiento
-                    move_direction = None
-                    if dx == 1: move_direction = "Right"
-                    elif dx == -1: move_direction = "Left"
-                    elif dy == 1: move_direction = "Up"
-                    elif dy == -1: move_direction = "Down"
-                    
-                    # Si la carretera vecina va en dirección OPUESTA a mi movimiento, es inválido
-                    # Ej: Me muevo a la Derecha (Right) y la calle es Izquierda (<) -> CHOQUE
-                    if neighbor_road.direction == opposites.get(move_direction):
-                        continue
-                
-                # Si pasa todas las pruebas, es un vecino válido
-                tentative_g = g_score[current] + 1
-                if neighbor not in g_score or tentative_g < g_score[neighbor]:
-                    came_from[neighbor] = current
-                    g_score[neighbor] = tentative_g
-                    f_score = tentative_g + abs(neighbor[0]-goal[0]) + abs(neighbor[1]-goal[1])
-                    heapq.heappush(open_set, (f_score, neighbor))
         
     def perceive_environment(self):
         """
@@ -239,24 +121,19 @@ class Car(CellAgent):
                 perception['road'] = agent
                 break
         
-        # NUEVO: Usar path si existe
-        if self.path and self.path_index < len(self.path):
-            next_pos = self.path[self.path_index]
-            perception['next_cell'] = self.model.grid[next_pos]
-        elif perception['road']:
-            # Fallback: usar dirección de la carretera si no hay path
+        # Si hay carretera, calcular la siguiente celda
+        if perception['road']:
             next_pos = self._calculate_next_position(perception['road'].direction)
             if next_pos:
                 perception['next_cell'] = self.model.grid[next_pos]
-        
-        # Percibir agentes en la SIGUIENTE celda
-        if perception['next_cell']:
-            for agent in perception['next_cell'].agents:
-                if isinstance(agent, Car):
-                    perception['cars_ahead'].append(agent)
-                elif isinstance(agent, Traffic_Light):
-                    # Detectar semáforo en la siguiente celda
-                    perception['traffic_light'] = agent
+                
+                # Percibir agentes en la SIGUIENTE celda
+                for agent in perception['next_cell'].agents:
+                    if isinstance(agent, Car):
+                        perception['cars_ahead'].append(agent)
+                    elif isinstance(agent, Traffic_Light):
+                        # Detectar semáforo en la siguiente celda
+                        perception['traffic_light'] = agent
         
         return perception
     
@@ -404,15 +281,8 @@ class Car(CellAgent):
             self.transition_navigating_state(NavigatingState.BLOCKED)
             return 'wait'
         
-        # Prioridad 4: Verificar que la siguiente celda tenga carretera O sea mi destino
-        is_my_destination = False
-        if self.destination and perception['next_cell']:
-            for agent in perception['next_cell'].agents:
-                if agent == self.destination:
-                    is_my_destination = True
-                    break
-        
-        if not self._has_road(perception['next_cell']) and not is_my_destination:
+        # Prioridad 4: Verificar que la siguiente celda tenga carretera
+        if not self._has_road(perception['next_cell']):
             self.transition_navigating_state(NavigatingState.BLOCKED)
             return 'wait'
         
@@ -483,18 +353,14 @@ class Car(CellAgent):
             # Moverse a la siguiente celda
             self.cell = next_cell
             self.steps_taken += 1
-            
-            # NUEVO: Avanzar en el path
-            if self.path and self.path_index < len(self.path):
-                self.path_index += 1
-                
         elif action == 'wait':
             # El carro espera en su posición actual
             pass
         elif action == 'stop':
             # El carro ha llegado a su destino
             pass
-            
+
+
     def step(self):
         """ 
         Paso de ejecución del agente.
@@ -622,4 +488,3 @@ class PedestrianWalk(FixedAgent):
         super().__init__(model)
         self.cell = cell
         self.direction = direction
-
