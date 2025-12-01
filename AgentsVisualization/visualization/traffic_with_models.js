@@ -7,6 +7,7 @@ import { Scene3D } from '../libs/scene3d';
 import { Object3D } from '../libs/object3d';
 import { Camera3D } from '../libs/camera3d';
 import { loadObj } from '../libs/obj_loader.js';
+import { Light3D } from '../libs/light3d';
 
 // Functions and arrays for the communication with the API
 import {
@@ -17,8 +18,8 @@ import {
 } from '../libs/api_connection.js';
 
 // Define the shader code, using GLSL 3.00
-import vsGLSL from '../assets/shaders/vs_color.glsl?raw';
-import fsGLSL from '../assets/shaders/fs_color.glsl?raw';
+import vsGLSL from '../assets/shaders/vs_phong.glsl?raw';
+import fsGLSL from '../assets/shaders/fs_phong.glsl?raw';
 
 const scene = new Scene3D();
 
@@ -59,6 +60,13 @@ const trafficLightGeometry = {
     vao: null
 };
 
+// Store geometry for the bulb
+const bulbGeometry = {
+    arrays: null,
+    bufferInfo: null,
+    vao: null
+};
+
 // Main function is async to be able to make the requests
 async function main() {
     // Setup the canvas area
@@ -69,6 +77,13 @@ async function main() {
 
     // Prepare the program with the shaders
     colorProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
+
+    // Initialize bulb geometry (simple cube)
+    const bulbObject = new Object3D("bulb_geom");
+    bulbObject.prepareVAO(gl, colorProgramInfo);
+    bulbGeometry.arrays = bulbObject.arrays;
+    bulbGeometry.bufferInfo = bulbObject.bufferInfo;
+    bulbGeometry.vao = bulbObject.vao;
 
     // Load car model
     const carArrays = await loadModel('../assets/models/car-2024-301.obj');
@@ -197,11 +212,15 @@ function setupScene() {
         settings.camera.elevation,     // Elevation
         [0, 0, 10],                    // Initial position
         [settings.camera.targetX, settings.camera.targetY, settings.camera.targetZ]); // Target
-    // These values are empyrical.
-    // Maybe find a better way to determine them
-    camera.panOffset = [0, 8, 0];
     scene.setCamera(camera);
     scene.camera.setupControls();
+
+    // Add a light to the scene
+    let light = new Light3D(0, [15, 15, 15],           // Position
+        [0.5, 0.5, 0.5, 1.0],   // Ambient
+        [1.0, 1.0, 1.0, 1.0],   // Diffuse
+        [1.0, 1.0, 1.0, 1.0]);  // Specular
+    scene.addLight(light);
 }
 
 function setupObjects(scene, gl, programInfo) {
@@ -209,82 +228,64 @@ function setupObjects(scene, gl, programInfo) {
     const baseCube = new Object3D(-1);
     baseCube.prepareVAO(gl, programInfo);
 
-
-    // Helper function to create colored cube
-    function createColoredCube(color) {
-        const cube = new Object3D(-1);
-        cube.prepareVAO(gl, programInfo);
-
-        const numVertices = cube.arrays.a_color.data.length / 4;
-        for (let i = 0; i < numVertices; i++) {
-            const offset = i * 4;
-            cube.arrays.a_color.data[offset + 0] = color[0];
-            cube.arrays.a_color.data[offset + 1] = color[1];
-            cube.arrays.a_color.data[offset + 2] = color[2];
-            cube.arrays.a_color.data[offset + 3] = color[3];
-        }
-
-        cube.bufferInfo = twgl.createBufferInfoFromArrays(gl, cube.arrays);
-        cube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, cube.bufferInfo);
-        return cube;
-    }
-
     // AGENTS (cars) - Magenta
     for (const agent of agents) {
         agent.arrays = agentGeometry.arrays;
         agent.bufferInfo = agentGeometry.bufferInfo;
         agent.vao = agentGeometry.vao;
         agent.scale = { x: 0.2, y: 0.2, z: 0.2 };
+        agent.color = [1.0, 0.0, 1.0, 1.0]; // Magenta
+        agent.isDynamic = true; // Mark as dynamic for updates
         scene.addObject(agent);
     }
 
     // OBSTACLES (buildings) - Gray
-    const obstacleCube = createColoredCube([0.8, 0.8, 0.8, 1.0]);
     for (const agent of obstacles) {
-        agent.arrays = obstacleCube.arrays;
-        agent.bufferInfo = obstacleCube.bufferInfo;
-        agent.vao = obstacleCube.vao;
+        agent.arrays = baseCube.arrays;
+        agent.bufferInfo = baseCube.bufferInfo;
+        agent.vao = baseCube.vao;
         agent.scale = { x: 0.5, y: 5, z: 0.5 };
+        agent.color = [0.6, 0.6, 0.6, 1.0]; // Gray
         scene.addObject(agent);
     }
 
     // ROADS - Dark gray
-    const roadCube = createColoredCube([0.2, 0.2, 0.2, 1.0]);
     for (const road of roads) {
-        road.arrays = roadCube.arrays;
-        road.bufferInfo = roadCube.bufferInfo;
-        road.vao = roadCube.vao;
+        road.arrays = baseCube.arrays;
+        road.bufferInfo = baseCube.bufferInfo;
+        road.vao = baseCube.vao;
         road.scale = { x: 1.0, y: 0.05, z: 1.0 };
+        road.color = [0.2, 0.2, 0.2, 1.0]; // Dark gray
         scene.addObject(road);
     }
 
     // SIDEWALKS - Light gray
-    const sidewalkCube = createColoredCube([0.6, 0.6, 0.6, 1.0]);
     for (const sidewalk of sidewalks) {
-        sidewalk.arrays = sidewalkCube.arrays;
-        sidewalk.bufferInfo = sidewalkCube.bufferInfo;
-        sidewalk.vao = sidewalkCube.vao;
+        sidewalk.arrays = baseCube.arrays;
+        sidewalk.bufferInfo = baseCube.bufferInfo;
+        sidewalk.vao = baseCube.vao;
         sidewalk.scale = { x: 0.5, y: 0.08, z: 0.5 };
+        sidewalk.color = [0.8, 0.8, 0.8, 1.0]; // Light gray
         scene.addObject(sidewalk);
     }
 
-    // SIDEWALKS - Light gray
-    const pedestrianWalkCube = createColoredCube([1.0, 1.0, 0.0, 1.0]);
+    // PEDESTRIAN WALKS - Yellow
     for (const pedestrianWalk of pedestrianWalks) {
-        pedestrianWalk.arrays = pedestrianWalkCube.arrays;
-        pedestrianWalk.bufferInfo = pedestrianWalkCube.bufferInfo;
-        pedestrianWalk.vao = pedestrianWalkCube.vao;
+        pedestrianWalk.arrays = baseCube.arrays;
+        pedestrianWalk.bufferInfo = baseCube.bufferInfo;
+        pedestrianWalk.vao = baseCube.vao;
         pedestrianWalk.scale = { x: 0.5, y: 0.08, z: 0.5 };
+        pedestrianWalk.color = [1.0, 1.0, 0.0, 1.0]; // Yellow
         scene.addObject(pedestrianWalk);
     }
 
-    // SIDEWALKS - Light gray
-    const destinationCube = createColoredCube([0.0, 1.0, 0.0, 1.0]);
+    // DESTINATIONS - Green
     for (const destination of destinations) {
-        destination.arrays = destinationCube.arrays;
-        destination.bufferInfo = destinationCube.bufferInfo;
-        destination.vao = destinationCube.vao;
+        destination.arrays = baseCube.arrays;
+        destination.bufferInfo = baseCube.bufferInfo;
+        destination.vao = baseCube.vao;
         destination.scale = { x: 0.5, y: 0.08, z: 0.5 };
+        destination.color = [0.0, 1.0, 0.0, 1.0]; // Green
         scene.addObject(destination);
     }
 
@@ -294,17 +295,19 @@ function setupObjects(scene, gl, programInfo) {
         trafficLight.bufferInfo = trafficLightGeometry.bufferInfo;
         trafficLight.vao = trafficLightGeometry.vao;
         trafficLight.scale = { x: 0.5, y: 0.5, z: 0.5 };
+        // trafficLight.color is already set in the model loader or defaults
         scene.addObject(trafficLight);
     }
 }
 
-function checkForNewCars() {
+function updateSceneAgents() {
     // Use the global geometry
     if (!agentGeometry.vao) {
         console.warn("Agent geometry not initialized");
         return;
     }
 
+    // 1. Add new agents
     for (const agent of agents) {
         const existsInScene = scene.objects.find(obj => obj.id == agent.id);
         if (!existsInScene) {
@@ -316,10 +319,22 @@ function checkForNewCars() {
             // Set appearance (matching setupObjects)
             agent.scale = { x: 0.2, y: 0.2, z: 0.2 };
             agent.color = [1.0, 0.0, 1.0, 1.0]; // Magenta for cars
+            agent.isDynamic = true; // Mark as dynamic
 
             scene.addObject(agent);
         }
     }
+
+    // 2. Remove dead agents
+    // Filter scene.objects to remove dynamic objects that are no longer in the agents list
+    scene.objects = scene.objects.filter(obj => {
+        if (obj.isDynamic) {
+            // Check if this agent ID is still in the global 'agents' list
+            const stillActive = agents.some(a => a.id == obj.id);
+            return stillActive;
+        }
+        return true; // Keep static objects
+    });
 }
 
 // Convert orientation string to rotation angle (in radians)
@@ -378,9 +393,18 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     // World-View-Projection
     const wvpMat = M4.multiply(viewProjectionMatrix, transforms);
 
+    // The matrix to be used for normal transformations
+    const normalMat = M4.transpose(M4.inverse(object.matrix));
+
     // Model uniforms
     let objectUniforms = {
-        u_transforms: wvpMat
+        u_world: object.matrix,
+        u_worldInverseTransform: normalMat,
+        u_worldViewProjection: wvpMat,
+        u_ambientColor: object.color,
+        u_diffuseColor: object.color,
+        u_specularColor: [1.0, 1.0, 1.0, 1.0],
+        u_shininess: 50.0
     }
     twgl.setUniforms(programInfo, objectUniforms);
 
@@ -411,18 +435,79 @@ async function drawScene() {
 
     // Draw the objects
     gl.useProgram(colorProgramInfo.program);
+
+    // Scene uniforms
+    const light = scene.lights[0];
+    let globalUniforms = {
+        u_lightWorldPosition: light.posArray,
+        u_viewWorldPosition: scene.camera.posArray,
+        u_ambientLight: light.ambient,
+        u_diffuseLight: light.diffuse,
+        u_specularLight: light.specular
+    }
+    twgl.setUniforms(colorProgramInfo, globalUniforms);
+
     for (let object of scene.objects) {
         drawObject(gl, colorProgramInfo, object, viewProjectionMatrix, fract);
     }
+
+    // Draw traffic light bulbs
+    drawTrafficLightBulbs(gl, colorProgramInfo, viewProjectionMatrix);
 
     // Update the scene after the elapsed duration
     if (elapsed >= duration) {
         elapsed = 0;
         await update();
-        checkForNewCars();
+        updateSceneAgents();
     }
 
     requestAnimationFrame(drawScene);
+}
+
+// Helper to draw traffic light bulbs
+function drawTrafficLightBulbs(gl, programInfo, viewProjectionMatrix) {
+    if (!bulbGeometry.vao) return;
+
+    // Create a temporary object for the bulb
+    // We'll use a small scale for the bulb
+    const bulbScale = { x: 0.15, y: 0.15, z: 0.15 };
+
+    for (const tl of trafficLights) {
+        // Determine color based on state
+        // Assuming state is boolean: true = Green, false = Red
+        // Or string: "Green", "Red"
+        let color = [1.0, 0.0, 0.0, 1.0]; // Default Red
+        let offset = { x: 0, y: 0, z: 0 };
+
+        // Check state (adjust logic based on actual server data)
+        // Adjust heights based on your specific traffic light model
+        if (tl.state === true || tl.state === "Green" || tl.state === "green") {
+            color = [0.0, 1.0, 0.0, 1.0]; // Green
+            // Green light position (lower)
+            offset = { x: 0, y: 2.2, z: 0 };
+        } else {
+            color = [1.0, 0.0, 0.0, 1.0]; // Red
+            // Red light position (higher)
+            offset = { x: 0, y: 2.6, z: 0 };
+        }
+
+        // Create the bulb object at the calculated position
+        const bulb = new Object3D("bulb", [
+            tl.position.x + offset.x,
+            tl.position.y + offset.y,
+            tl.position.z + offset.z
+        ]);
+
+        bulb.scale = bulbScale;
+        bulb.color = color;
+
+        // Use bulb geometry
+        bulb.arrays = bulbGeometry.arrays;
+        bulb.bufferInfo = bulbGeometry.bufferInfo;
+        bulb.vao = bulbGeometry.vao;
+
+        drawObject(gl, programInfo, bulb, viewProjectionMatrix, 0);
+    }
 }
 
 function setupViewProjection(gl) {

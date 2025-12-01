@@ -86,7 +86,18 @@ async function getAgents() {
                     agents.push(newAgent);
                 }
             } else {
-                // Update the positions of existing agents
+                // Create a set of IDs from the server response for quick lookup
+                const serverAgentIds = new Set(result.agentpos.map(a => a.id));
+
+                // Remove agents that are no longer in the server response
+                for (let i = agents.length - 1; i >= 0; i--) {
+                    if (!serverAgentIds.has(agents[i].id)) {
+                        // console.log(`🗑️ Removing agent: ${agents[i].id}`);
+                        agents.splice(i, 1);
+                    }
+                }
+
+                // Update the positions of existing agents or add new ones
                 for (const agent of result.agentpos) {
                     const current_agent = agents.find((object3d) => object3d.id == agent.id);
 
@@ -153,9 +164,20 @@ async function getTrafficLights() {
         let response = await fetch(agent_server_uri + "getTrafficLights");
         if (response.ok) {
             let result = await response.json();
-            for (const tf of result.TrafficLightpos) {
-                const newTF = new Object3D(tf.id, [tf.x, tf.y, tf.z]);
-                trafficLights.push(newTF);
+
+            if (trafficLights.length === 0) {
+                for (const tf of result.TrafficLightpos) {
+                    const newTF = new Object3D(tf.id, [tf.x, tf.y, tf.z]);
+                    newTF.state = tf.state;
+                    trafficLights.push(newTF);
+                }
+            } else {
+                for (const tf of result.TrafficLightpos) {
+                    const currentTF = trafficLights.find((t) => t.id == tf.id);
+                    if (currentTF) {
+                        currentTF.state = tf.state;
+                    }
+                }
             }
         } else {
             let result = await response.json();
@@ -298,6 +320,8 @@ async function update() {
             await getAgents();
             // Retrieve the updated pedestrian positions
             await getPedestrians();
+            // Retrieve updated traffic lights (for state changes)
+            await getTrafficLights();
             // Log a message indicating that the agents have been updated
             //console.log("Updated agents");
         } else {
