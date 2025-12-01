@@ -450,6 +450,7 @@ function skyboxCube(size) {
 
     // Update UVs for a standard horizontal cross layout
     // Layout:
+    //       T
     //    L  F  R  B
     //       D
     // U: 0  1  2  3  4  (x 0.25)
@@ -478,23 +479,23 @@ function skyboxCube(size) {
 
     let texCoords = [];
 
-    // Front (0-3): BL, BR, TR, TL -> Standard Order [0, 1, 2, 3]
-    texCoords.push(...getFaceUVs(1, 1, [0, 1, 2, 3]));
+    // Front (0-3): Use Back region (3,1), Rotated 180 degrees -> [2, 3, 0, 1]
+    texCoords.push(...getFaceUVs(3, 1, [2, 3, 0, 1]));
 
-    // Back (4-7): BR, TR, TL, BL -> Order [1, 2, 3, 0]
-    texCoords.push(...getFaceUVs(3, 1, [1, 2, 3, 0]));
+    // Back (4-7): Use Front region (1,1), Rotated 180 degrees -> [3, 0, 1, 2]
+    texCoords.push(...getFaceUVs(1, 1, [3, 0, 1, 2]));
 
-    // Top (8-11): TL, BL, BR, TR -> Order [3, 0, 1, 2]
-    texCoords.push(...getFaceUVs(1, 2, [3, 0, 1, 2]));
+    // Top (8-11): Use Bottom region (1, 0) -> Order [3, 0, 1, 2]
+    texCoords.push(...getFaceUVs(1, 0, [3, 0, 1, 2]));
 
-    // Bottom (12-15): BL, BR, TR, TL -> Standard Order [0, 1, 2, 3]
-    texCoords.push(...getFaceUVs(1, 0, [0, 1, 2, 3]));
+    // Bottom (12-15): Use Top region (1, 2) -> Standard Order [0, 1, 2, 3]
+    texCoords.push(...getFaceUVs(1, 2, [0, 1, 2, 3]));
 
-    // Right (16-19): BR, TR, TL, BL -> Order [1, 2, 3, 0]
-    texCoords.push(...getFaceUVs(2, 1, [1, 2, 3, 0]));
+    // Right (16-19): Rotated 180 degrees from [1, 2, 3, 0] -> [3, 0, 1, 2]
+    texCoords.push(...getFaceUVs(2, 1, [3, 0, 1, 2]));
 
-    // Left (20-23): BL, BR, TR, TL -> Standard Order [0, 1, 2, 3]
-    texCoords.push(...getFaceUVs(0, 1, [0, 1, 2, 3]));
+    // Left (20-23): Rotated 180 degrees -> [2, 3, 0, 1]
+    texCoords.push(...getFaceUVs(0, 1, [2, 3, 0, 1]));
 
     arrays.a_texCoord.data = texCoords;
 
