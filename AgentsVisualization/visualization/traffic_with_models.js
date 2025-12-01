@@ -8,6 +8,7 @@ import { Object3D } from '../libs/object3d';
 import { Camera3D } from '../libs/camera3d';
 import { loadObj } from '../libs/obj_loader.js';
 import { Light3D } from '../libs/light3d';
+import { cubeTextured } from '../libs/shapes';
 
 // Functions and arrays for the communication with the API
 import {
@@ -20,11 +21,14 @@ import {
 // Define the shader code, using GLSL 3.00
 import vsGLSL from '../assets/shaders/vs_phong.glsl?raw';
 import fsGLSL from '../assets/shaders/fs_phong.glsl?raw';
+import vsTextureGLSL from '../assets/shaders/vs_phong_textures.glsl?raw';
+import fsTextureGLSL from '../assets/shaders/fs_phong_textures.glsl?raw';
 
 const scene = new Scene3D();
 
 // Global variables
 let colorProgramInfo = undefined;
+let textureProgramInfo = undefined;
 let gl = undefined;
 const duration = 1000; // ms
 let elapsed = 0;
@@ -67,6 +71,13 @@ const bulbGeometry = {
     vao: null
 };
 
+// Store geometry for buildings
+const buildingGeometry = {
+    arrays: null,
+    bufferInfo: null,
+    vao: null
+};
+
 // Main function is async to be able to make the requests
 async function main() {
     // Setup the canvas area
@@ -76,7 +87,9 @@ async function main() {
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
     // Prepare the program with the shaders
+    // Prepare the program with the shaders
     colorProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
+    textureProgramInfo = twgl.createProgramInfo(gl, [vsTextureGLSL, fsTextureGLSL]);
 
     // Initialize bulb geometry (simple cube)
     const bulbObject = new Object3D("bulb_geom");
@@ -107,19 +120,35 @@ async function main() {
     const stoplightArrays = await loadModel('../assets/models/stoplight_1.obj');
 
     // Add color data to the stoplight model (gray/dark for now)
-    const numStoplightVertices = stoplightArrays.a_position.data.length / 3;
-    const stoplightColorData = [];
-    for (let i = 0; i < numStoplightVertices; i++) {
-        stoplightColorData.push(0.3, 0.3, 0.3, 1.0); // RGBA - Dark gray
+    const numVerticesSL = stoplightArrays.a_position.data.length / 3;
+    const colorDataSL = [];
+    for (let i = 0; i < numVerticesSL; i++) {
+        colorDataSL.push(0.2, 0.2, 0.2, 1.0); // Dark Gray
     }
-    stoplightArrays.a_color.data = stoplightColorData;
+    stoplightArrays.a_color.data = colorDataSL;
 
     const stoplightModel = createBufferAndVAO(gl, colorProgramInfo, stoplightArrays);
 
-    // Guardar geometría del semáforo
     trafficLightGeometry.arrays = stoplightModel.arrays;
     trafficLightGeometry.bufferInfo = stoplightModel.bufferInfo;
     trafficLightGeometry.vao = stoplightModel.vao;
+
+    // Load building model
+    const buildingArrays = await loadModel('../assets/models/AddedModels/shop 1.obj.obj');
+
+    // Add color data to the building model (light gray)
+    const numVerticesB = buildingArrays.a_position.data.length / 3;
+    const colorDataB = [];
+    for (let i = 0; i < numVerticesB; i++) {
+        colorDataB.push(0.7, 0.7, 0.7, 1.0); // Light Gray
+    }
+    buildingArrays.a_color.data = colorDataB;
+
+    const buildingModel = createBufferAndVAO(gl, colorProgramInfo, buildingArrays);
+
+    buildingGeometry.arrays = buildingModel.arrays;
+    buildingGeometry.bufferInfo = buildingModel.bufferInfo;
+    buildingGeometry.vao = buildingModel.vao;
 
     // Initialize the agents model
     await initAgentsModel();
@@ -240,42 +269,102 @@ function setupObjects(scene, gl, programInfo) {
     }
 
     // OBSTACLES (buildings) - Gray
+    // OBSTACLES (buildings) - Gray
     for (const agent of obstacles) {
-        agent.arrays = baseCube.arrays;
-        agent.bufferInfo = baseCube.bufferInfo;
-        agent.vao = baseCube.vao;
-        agent.scale = { x: 0.5, y: 5, z: 0.5 };
+        agent.arrays = buildingGeometry.arrays;
+        agent.bufferInfo = buildingGeometry.bufferInfo;
+        agent.vao = buildingGeometry.vao;
+        agent.scale = { x: 0.05, y: 0.05, z: 0.05 }; // Adjust scale as needed for the new model
         agent.color = [0.6, 0.6, 0.6, 1.0]; // Gray
         scene.addObject(agent);
     }
 
     // ROADS - Dark gray
+    // Load road texture
+    const roadTexture = twgl.createTexture(gl, {
+        min: gl.NEAREST,
+        mag: gl.NEAREST,
+        src: '../assets/textures/Road/asphalt.jpg'
+    });
+
+    // Load road texture
+    const sidewalkTexture = twgl.createTexture(gl, {
+        min: gl.NEAREST,
+        mag: gl.NEAREST,
+        src: '../assets/textures/Road/sidewalk1.jpg'
+    });
+
+    // Load road texture
+    const pedestrianWalkTexture = twgl.createTexture(gl, {
+        min: gl.NEAREST,
+        mag: gl.NEAREST,
+        src: '../assets/textures/Road/psidewalk.jpg'
+    });
+
+    // Create textured cube for roads
+    const roadCube = new Object3D(-1);
+    roadCube.arrays = cubeTextured(1);
+    roadCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, roadCube.arrays);
+    roadCube.vao = twgl.createVAOFromBufferInfo(gl, textureProgramInfo, roadCube.bufferInfo);
+
     for (const road of roads) {
-        road.arrays = baseCube.arrays;
-        road.bufferInfo = baseCube.bufferInfo;
-        road.vao = baseCube.vao;
+        road.arrays = roadCube.arrays;
+        road.bufferInfo = roadCube.bufferInfo;
+        road.vao = roadCube.vao;
         road.scale = { x: 1.0, y: 0.05, z: 1.0 };
         road.color = [0.2, 0.2, 0.2, 1.0]; // Dark gray
+        road.texture = roadTexture;
+        road.programInfo = textureProgramInfo; // Use texture program
         scene.addObject(road);
     }
 
     // SIDEWALKS - Light gray
     for (const sidewalk of sidewalks) {
-        sidewalk.arrays = baseCube.arrays;
-        sidewalk.bufferInfo = baseCube.bufferInfo;
-        sidewalk.vao = baseCube.vao;
+        sidewalk.arrays = roadCube.arrays;
+        sidewalk.bufferInfo = roadCube.bufferInfo;
+        sidewalk.vao = roadCube.vao;
         sidewalk.scale = { x: 0.5, y: 0.08, z: 0.5 };
         sidewalk.color = [0.8, 0.8, 0.8, 1.0]; // Light gray
+        sidewalk.texture = sidewalkTexture;
+        sidewalk.programInfo = textureProgramInfo; // Use texture program
         scene.addObject(sidewalk);
     }
 
     // PEDESTRIAN WALKS - Yellow
+    // Helper to check for neighbors
+    const pwSet = new Set(pedestrianWalks.map(p => `${p.position.x},${p.position.z}`));
+
     for (const pedestrianWalk of pedestrianWalks) {
-        pedestrianWalk.arrays = baseCube.arrays;
-        pedestrianWalk.bufferInfo = baseCube.bufferInfo;
-        pedestrianWalk.vao = baseCube.vao;
+        pedestrianWalk.arrays = roadCube.arrays;
+        pedestrianWalk.bufferInfo = roadCube.bufferInfo;
+        pedestrianWalk.vao = roadCube.vao;
         pedestrianWalk.scale = { x: 0.5, y: 0.08, z: 0.5 };
         pedestrianWalk.color = [1.0, 1.0, 0.0, 1.0]; // Yellow
+        pedestrianWalk.texture = pedestrianWalkTexture;
+        pedestrianWalk.programInfo = textureProgramInfo; // Use texture program
+        pedestrianWalk.useWorldUV = true;
+        pedestrianWalk.uvScale = 1.0;
+
+        // Determine orientation based on neighbors
+        const x = pedestrianWalk.position.x;
+        const z = pedestrianWalk.position.z;
+        // Check horizontal neighbors (East-West)
+        const hasHorizontalNeighbor = pwSet.has(`${x + 1},${z}`) || pwSet.has(`${x - 1},${z}`);
+
+        // If it has horizontal neighbors, it's likely an East-West crossing.
+        // We want longitudinal stripes (parallel to traffic).
+        // Texture has horizontal lines (vary with V).
+
+        if (hasHorizontalNeighbor) {
+            // E-W Crossing (Traffic along X). Want lines along X.
+            // V should depend on Z (width). uv = xz (v=z).
+            pedestrianWalk.rotateUV = false;
+        } else {
+            // N-S Crossing (Traffic along Z). Want lines along Z.
+            // V should depend on X (width). uv = zx (v=x).
+            pedestrianWalk.rotateUV = true;
+        }
+
         scene.addObject(pedestrianWalk);
     }
 
@@ -405,7 +494,16 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
         u_diffuseColor: object.color,
         u_specularColor: [1.0, 1.0, 1.0, 1.0],
         u_shininess: 50.0
+    };
+
+    // Add texture uniform if object has texture
+    if (object.texture) {
+        objectUniforms.u_texture = object.texture;
+        objectUniforms.u_useWorldUV = object.useWorldUV || false;
+        objectUniforms.u_rotateUV = object.rotateUV || false;
+        objectUniforms.u_uvScale = object.uvScale || 1.0;
     }
+
     twgl.setUniforms(programInfo, objectUniforms);
 
     gl.bindVertexArray(object.vao);
@@ -448,7 +546,12 @@ async function drawScene() {
     twgl.setUniforms(colorProgramInfo, globalUniforms);
 
     for (let object of scene.objects) {
-        drawObject(gl, colorProgramInfo, object, viewProjectionMatrix, fract);
+        // Switch program if necessary
+        let currentProgramInfo = object.programInfo || colorProgramInfo;
+        gl.useProgram(currentProgramInfo.program);
+        twgl.setUniforms(currentProgramInfo, globalUniforms);
+
+        drawObject(gl, currentProgramInfo, object, viewProjectionMatrix, fract);
     }
 
     // Draw traffic light bulbs
