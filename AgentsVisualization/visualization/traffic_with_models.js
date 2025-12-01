@@ -13,7 +13,9 @@ import {
     agents, obstacles, initAgentsModel,
     update, getAgents, getObstacles, getRoads,
     roads, getDestinations, destinations, getTrafficLights, trafficLights,
-    getSidewalks, sidewalks, getPedestrianWalks, pedestrianWalks
+    getSidewalks, sidewalks, getPedestrianWalks, pedestrianWalks,
+    setSpawnInterval, setPedestriansEnabled, resetSimulation as apiResetSimulation, simulationSettings,
+    pedestrians, getPedestrians
 } from '../libs/api_connection.js';
 
 // Define the shader code, using GLSL 3.00
@@ -28,6 +30,54 @@ let gl = undefined;
 const duration = 1000; // ms
 let elapsed = 0;
 let then = 0;
+
+// UI Settings
+const settings = {
+    spawnRate: 10,  // Lower = faster spawning (spawn interval)
+    pedestriansEnabled: true,
+    seed: 42,
+    rotationSpeed: { x: 0, y: 0, z: 0 },
+    
+    // Action functions for buttons
+    resetSimulation: async function() {
+        console.log("Resetting simulation...");
+        const success = await apiResetSimulation(settings.seed);
+        if (success) {
+            // Clear the scene objects (keep only static elements like roads)
+            scene.objects = scene.objects.filter(obj => {
+                // Keep roads, obstacles, sidewalks, etc. (non-agent objects)
+                return !agents.includes(obj) && !pedestrians.includes(obj);
+            });
+            
+            // Reload static elements and agents
+            await getObstacles();
+            await getRoads();
+            await getDestinations();
+            await getSidewalks();
+            await getPedestrianWalks();
+            await getTrafficLights();
+            await getAgents();
+            await getPedestrians();
+            
+            // Re-setup objects
+            setupObjects(scene, gl, colorProgramInfo);
+            console.log("Simulation reset complete!");
+        }
+    },
+    
+    togglePedestrians: async function() {
+        settings.pedestriansEnabled = !settings.pedestriansEnabled;
+        await setPedestriansEnabled(settings.pedestriansEnabled);
+        console.log(`Pedestrians ${settings.pedestriansEnabled ? 'enabled' : 'disabled'}`);
+    }
+};
+
+// Store geometry for pedestrians
+const pedestrianGeometry = {
+    arrays: null,
+    bufferInfo: null,
+    vao: null
+};
 
 // Store geometry for dynamic agents
 const agentGeometry = {
@@ -67,6 +117,7 @@ async function main() {
     await getSidewalks();
     await getPedestrianWalks();
     await getTrafficLights();
+    await getPedestrians();
 
 
 
@@ -171,7 +222,7 @@ function setupObjects(scene, gl, programInfo) {
         scene.addObject(pedestrianWalk);
     }
 
-    // SIDEWALKS - Light gray
+    // DESTINATIONS - Green
     const destinationCube = createColoredCube([0.0, 1.0, 0.0, 1.0]);
     for (const destination of destinations) {
         destination.arrays = destinationCube.arrays;
@@ -179,6 +230,20 @@ function setupObjects(scene, gl, programInfo) {
         destination.vao = destinationCube.vao;
         destination.scale = { x: 0.5, y: 0.08, z: 0.5 };
         scene.addObject(destination);
+    }
+
+    // PEDESTRIANS - Blue cubes
+    const pedestrianCube = createColoredCube([0.2, 0.4, 1.0, 1.0]);
+    pedestrianGeometry.arrays = pedestrianCube.arrays;
+    pedestrianGeometry.bufferInfo = pedestrianCube.bufferInfo;
+    pedestrianGeometry.vao = pedestrianCube.vao;
+    
+    for (const ped of pedestrians) {
+        ped.arrays = pedestrianCube.arrays;
+        ped.bufferInfo = pedestrianCube.bufferInfo;
+        ped.vao = pedestrianCube.vao;
+        ped.scale = { x: 0.15, y: 0.3, z: 0.15 };
+        scene.addObject(ped);
     }
 }
 
@@ -202,6 +267,29 @@ function checkForNewCars() {
             agent.color = [1.0, 0.0, 1.0, 1.0]; // Magenta for cars
 
             scene.addObject(agent);
+        }
+    }
+}
+
+function checkForNewPedestrians() {
+    // Use the pedestrian geometry
+    if (!pedestrianGeometry.vao) {
+        console.warn("Pedestrian geometry not initialized");
+        return;
+    }
+
+    for (const ped of pedestrians) {
+        const existsInScene = scene.objects.find(obj => obj.id == ped.id);
+        if (!existsInScene) {
+            // Copy visual properties from pedestrian geometry
+            ped.arrays = pedestrianGeometry.arrays;
+            ped.bufferInfo = pedestrianGeometry.bufferInfo;
+            ped.vao = pedestrianGeometry.vao;
+
+            // Set appearance - smaller blue cubes for pedestrians
+            ped.scale = { x: 0.15, y: 0.3, z: 0.15 };
+
+            scene.addObject(ped);
         }
     }
 }
@@ -275,6 +363,7 @@ async function drawScene() {
         elapsed = 0;
         await update();
         checkForNewCars();
+        checkForNewPedestrians();
     }
 
     requestAnimationFrame(drawScene);
@@ -302,20 +391,64 @@ function setupViewProjection(gl) {
 // Setup a ui.
 function setupUI() {
     const gui = new GUI();
-  
-    // Settings for the animation
-    const animFolder = gui.addFolder('Animation:');
-    animFolder.add( settings.rotationSpeed, 'x', 0, 360)
-        .decimals(2)
-    animFolder.add( settings.rotationSpeed, 'y', 0, 360)
-        .decimals(2)
-    animFolder.add( settings.rotationSpeed, 'z', 0, 360)
-        .decimals(2)
+    gui.title('Controls');
+    
+    // ========== CAMERA CONTROLS ==========
+    const cameraFolder = gui.addFolder('Camera Controls');
+    cameraFolder.add(scene.camera, 'distance', 10, 100, 0.1)
+        .name('Distance (Zoom)')
+        .listen();
+    cameraFolder.add(scene.camera, 'azimuth', -Math.PI, Math.PI, 0.01)
+        .name('Azimuth (Horizontal)')
+        .listen();
+    cameraFolder.add(scene.camera, 'elevation', -1.5, 1.5, 0.01)
+        .name('Elevation (Vertical)')
+        .listen();
+    
+    const targetFolder = gui.addFolder('Target Position');
+    targetFolder.add(scene.camera.target, 'x', -50, 50, 0.1)
+        .name('Target X')
+        .listen();
+    targetFolder.add(scene.camera.target, 'y', -50, 50, 0.1)
+        .name('Target Y')
+        .listen();
+    targetFolder.add(scene.camera.target, 'z', -50, 50, 0.1)
+        .name('Target Z')
+        .listen();
+    
+    // ========== SIMULATION CONTROLS ==========
+    const simFolder = gui.addFolder('Simulation Controls');
+    
+    // Spawn rate slider (1 = very fast, 30 = slow)
+    simFolder.add(settings, 'spawnRate', 1, 30, 1)
+        .name('Spawn Interval')
+        .onChange(async (value) => {
+            await setSpawnInterval(value);
+            console.log(`Spawn interval set to ${value}`);
+        });
+    
+    // Pedestrians toggle
+    simFolder.add(settings, 'pedestriansEnabled')
+        .name('Pedestrians Enabled')
+        .onChange(async (value) => {
+            await setPedestriansEnabled(value);
+            console.log(`Pedestrians ${value ? 'enabled' : 'disabled'}`);
+        });
+    
+    // Seed input
+    simFolder.add(settings, 'seed', 1, 9999, 1)
+        .name('Random Seed');
+    
+    // Reset button
+    simFolder.add(settings, 'resetSimulation')
+        .name('🔄 Reset Simulation');
+    
+    simFolder.open();
 }
 
 //Load a .obj model from a file path
 async function loadModel(path) {
-    console.log(`📦 Loading model: ${path}`);
+    console.log(`Loading model: ${path}`);
     try {
         const response = await fetch(path);
         if (!response.ok) {
@@ -323,10 +456,10 @@ async function loadModel(path) {
         }
         const objText = await response.text();
         const arrays = loadObj(objText);
-        console.log(`✅ Loaded ${path}`);
+        console.log(`Loaded ${path}`);
         return arrays;
     } catch (error) {
-        console.error(`❌ Error loading ${path}:`, error);
+        console.error(`Error loading ${path}:`, error);
         throw error;
     }
 }

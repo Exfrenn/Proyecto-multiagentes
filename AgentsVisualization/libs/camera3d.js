@@ -104,7 +104,7 @@ class Camera3D {
     zoom(delta) {
         this.distance += delta * this.zoomSpeed;
         // Limit the near and far distances of the camera
-        this.distance = Math.max(10, Math.min(50, this.distance));
+        this.distance = Math.max(10, Math.min(100, this.distance));
     }
 
     setupControls() {

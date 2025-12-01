@@ -27,7 +27,16 @@ const pedestrianWalks = [];
 const initData = {
     NAgents: 20,
     width: 30,
-    height: 30
+    height: 30,
+    seed: 42,
+    spawnInterval: 10
+};
+
+// Settings that can be modified via UI
+const simulationSettings = {
+    spawnInterval: 10,
+    pedestriansEnabled: true,
+    seed: 42
 };
 
 
@@ -38,11 +47,18 @@ const initData = {
  */
 async function initAgentsModel() {
     try {
+        // Include seed and spawn interval in init data
+        const data = {
+            ...initData,
+            seed: simulationSettings.seed,
+            spawnInterval: simulationSettings.spawnInterval
+        };
+        
         // Send a POST request to the agent server to initialize the model
         let response = await fetch(agent_server_uri + "init", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(initData)
+            body: JSON.stringify(data)
         });
 
         // Check if the response was successful
@@ -58,6 +74,98 @@ async function initAgentsModel() {
     } catch (error) {
         // Log any errors that occur during the request
         console.log(error);
+    }
+}
+
+/*
+ * Sets the spawn interval for cars and pedestrians.
+ */
+async function setSpawnInterval(interval) {
+    try {
+        let response = await fetch(agent_server_uri + "setSpawnInterval", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ interval: interval })
+        });
+
+        if (response.ok) {
+            let result = await response.json();
+            console.log(result.message);
+            simulationSettings.spawnInterval = interval;
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+/*
+ * Enables or disables pedestrian spawning.
+ */
+async function setPedestriansEnabled(enabled) {
+    try {
+        let response = await fetch(agent_server_uri + "setPedestriansEnabled", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: enabled })
+        });
+
+        if (response.ok) {
+            let result = await response.json();
+            console.log(result.message);
+            simulationSettings.pedestriansEnabled = enabled;
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+/*
+ * Resets the simulation with the current settings.
+ */
+async function resetSimulation(seed = null) {
+    try {
+        const resetSeed = seed !== null ? seed : simulationSettings.seed;
+        
+        let response = await fetch(agent_server_uri + "reset", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                seed: resetSeed,
+                spawnInterval: simulationSettings.spawnInterval,
+                pedestriansEnabled: simulationSettings.pedestriansEnabled
+            })
+        });
+
+        if (response.ok) {
+            let result = await response.json();
+            console.log(result.message);
+            simulationSettings.seed = resetSeed;
+            
+            // Clear local arrays
+            agents.length = 0;
+            pedestrians.length = 0;
+            obstacles.length = 0;
+            trafficLights.length = 0;
+            roads.length = 0;
+            destinations.length = 0;
+            sidewalks.length = 0;
+            pedestrianWalks.length = 0;
+            
+            return true;
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
+            return false;
+        }
+    } catch (error) {
+        console.log(error);
+        return false;
     }
 }
 
@@ -305,4 +413,9 @@ async function update() {
     }
 }
 
-export { agents, pedestrians, obstacles, trafficLights, roads, destinations, sidewalks, pedestrianWalks, initAgentsModel, update, getAgents, getObstacles, getTrafficLights, getRoads, getDestinations, getSidewalks, getPedestrianWalks, getPedestrians };
+export { 
+    agents, pedestrians, obstacles, trafficLights, roads, destinations, sidewalks, pedestrianWalks,
+    initAgentsModel, update, getAgents, getObstacles, getTrafficLights, getRoads, getDestinations, 
+    getSidewalks, getPedestrianWalks, getPedestrians,
+    setSpawnInterval, setPedestriansEnabled, resetSimulation, simulationSettings
+};
