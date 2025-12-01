@@ -8,7 +8,7 @@ import { Object3D } from '../libs/object3d';
 import { Camera3D } from '../libs/camera3d';
 import { loadObj } from '../libs/obj_loader.js';
 import { Light3D } from '../libs/light3d';
-import { cubeTextured } from '../libs/shapes';
+import { cubeTextured, skyboxCube } from '../libs/shapes';
 
 // Functions and arrays for the communication with the API
 import {
@@ -23,12 +23,15 @@ import vsGLSL from '../assets/shaders/vs_phong.glsl?raw';
 import fsGLSL from '../assets/shaders/fs_phong.glsl?raw';
 import vsTextureGLSL from '../assets/shaders/vs_phong_textures.glsl?raw';
 import fsTextureGLSL from '../assets/shaders/fs_phong_textures.glsl?raw';
+import vsSkyboxGLSL from '../assets/shaders/vs_flat_textures.glsl?raw';
+import fsSkyboxGLSL from '../assets/shaders/fs_flat_textures.glsl?raw';
 
 const scene = new Scene3D();
 
 // Global variables
 let colorProgramInfo = undefined;
 let textureProgramInfo = undefined;
+let skyboxProgramInfo = undefined;
 let gl = undefined;
 const duration = 1000; // ms
 let elapsed = 0;
@@ -89,7 +92,9 @@ async function main() {
     // Prepare the program with the shaders
     // Prepare the program with the shaders
     colorProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
+    colorProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
     textureProgramInfo = twgl.createProgramInfo(gl, [vsTextureGLSL, fsTextureGLSL]);
+    skyboxProgramInfo = twgl.createProgramInfo(gl, [vsSkyboxGLSL, fsSkyboxGLSL]);
 
     // Initialize bulb geometry (simple cube)
     const bulbObject = new Object3D("bulb_geom");
@@ -243,13 +248,27 @@ function setupScene() {
         [settings.camera.targetX, settings.camera.targetY, settings.camera.targetZ]); // Target
     scene.setCamera(camera);
     scene.camera.setupControls();
-
     // Add a light to the scene
     let light = new Light3D(0, [15, 15, 15],           // Position
         [0.5, 0.5, 0.5, 1.0],   // Ambient
         [1.0, 1.0, 1.0, 1.0],   // Diffuse
         [1.0, 1.0, 1.0, 1.0]);  // Specular
     scene.addLight(light);
+
+    // Setup skybox
+    const skybox = new Object3D("skybox", [15, 0, 15]); // Center roughly in the middle of the city
+    skybox.arrays = skyboxCube(1); // Use generated cube with UVs
+    skybox.bufferInfo = twgl.createBufferInfoFromArrays(gl, skybox.arrays);
+    skybox.vao = twgl.createVAOFromBufferInfo(gl, skyboxProgramInfo, skybox.bufferInfo);
+    skybox.scale = { x: 50, y: 50, z: 50 }; // Large scale
+    skybox.texture = twgl.createTexture(gl, {
+        src: '../assets/textures/Skyboxes/Cubemap_Sky_08-512x512.png',
+        min: gl.LINEAR,
+        mag: gl.LINEAR,
+        wrap: gl.CLAMP_TO_EDGE
+    });
+    skybox.programInfo = skyboxProgramInfo;
+    scene.addObject(skybox);
 }
 
 function setupObjects(scene, gl, programInfo) {
@@ -551,7 +570,22 @@ async function drawScene() {
         gl.useProgram(currentProgramInfo.program);
         twgl.setUniforms(currentProgramInfo, globalUniforms);
 
+        // Special handling for skybox
+        if (object.id === "skybox") {
+            gl.disable(gl.CULL_FACE);
+            gl.depthMask(false); // Optional: don't write to depth buffer
+        } else {
+            gl.enable(gl.CULL_FACE);
+            gl.depthMask(true);
+        }
+
         drawObject(gl, currentProgramInfo, object, viewProjectionMatrix, fract);
+
+        // Restore state
+        if (object.id === "skybox") {
+            gl.enable(gl.CULL_FACE);
+            gl.depthMask(true);
+        }
     }
 
     // Draw traffic light bulbs
