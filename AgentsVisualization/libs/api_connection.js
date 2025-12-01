@@ -81,6 +81,8 @@ async function getAgents() {
                     const newAgent = new Object3D(agent.id, [agent.x, agent.y, agent.z]);
                     // Store the initial position
                     newAgent['oldPosArray'] = newAgent.posArray;
+                    // Store orientation
+                    newAgent['orientation'] = agent.orientation || "Up";
                     agents.push(newAgent);
                 }
             } else {
@@ -93,11 +95,15 @@ async function getAgents() {
                         // Update the agent's position
                         current_agent.oldPosArray = current_agent.posArray;
                         current_agent.position = { x: agent.x, y: agent.y, z: agent.z };
+                        // Update orientation
+                        current_agent.orientation = agent.orientation || "Up";
                     } else {
                         // NEW AGENT: Create and add to the array
                         // console.log(`🆕 New agent detected: ${agent.id}`);
                         const newAgent = new Object3D(agent.id, [agent.x, agent.y, agent.z]);
                         newAgent['oldPosArray'] = newAgent.posArray;
+                        // Store orientation
+                        newAgent['orientation'] = agent.orientation || "Up";
                         agents.push(newAgent);
                     }
                 }

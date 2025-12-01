@@ -29,8 +29,31 @@ const duration = 1000; // ms
 let elapsed = 0;
 let then = 0;
 
+const settings = {
+    rotationSpeed: {
+        x: 0,
+        y: 0,
+        z: 0
+    },
+    camera: {
+        distance: 27.4,
+        azimuth: 1.98,
+        elevation: 1.27,
+        targetX: 20.0,
+        targetY: -3.0,
+        targetZ: 10.0
+    }
+};
+
 // Store geometry for dynamic agents
 const agentGeometry = {
+    arrays: null,
+    bufferInfo: null,
+    vao: null
+};
+
+// Store geometry for traffic lights
+const trafficLightGeometry = {
     arrays: null,
     bufferInfo: null,
     vao: null
@@ -47,14 +70,41 @@ async function main() {
     // Prepare the program with the shaders
     colorProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
 
-
+    // Load car model
     const carArrays = await loadModel('../assets/models/car-2024-301.obj');
+
+    // Add color data to the model (magenta for cars)
+    const numVertices = carArrays.a_position.data.length / 3;
+    const colorData = [];
+    for (let i = 0; i < numVertices; i++) {
+        colorData.push(1.0, 0.0, 1.0, 1.0); // RGBA - Magenta
+    }
+    carArrays.a_color.data = colorData;
+
     const carModel = createBufferAndVAO(gl, colorProgramInfo, carArrays);
 
     // Guardar para uso posterior
     agentGeometry.arrays = carModel.arrays;
     agentGeometry.bufferInfo = carModel.bufferInfo;
     agentGeometry.vao = carModel.vao;
+
+    // Load traffic light model
+    const stoplightArrays = await loadModel('../assets/models/stoplight_1.obj');
+
+    // Add color data to the stoplight model (gray/dark for now)
+    const numStoplightVertices = stoplightArrays.a_position.data.length / 3;
+    const stoplightColorData = [];
+    for (let i = 0; i < numStoplightVertices; i++) {
+        stoplightColorData.push(0.3, 0.3, 0.3, 1.0); // RGBA - Dark gray
+    }
+    stoplightArrays.a_color.data = stoplightColorData;
+
+    const stoplightModel = createBufferAndVAO(gl, colorProgramInfo, stoplightArrays);
+
+    // Guardar geometría del semáforo
+    trafficLightGeometry.arrays = stoplightModel.arrays;
+    trafficLightGeometry.bufferInfo = stoplightModel.bufferInfo;
+    trafficLightGeometry.vao = stoplightModel.vao;
 
     // Initialize the agents model
     await initAgentsModel();
@@ -67,6 +117,9 @@ async function main() {
     await getSidewalks();
     await getPedestrianWalks();
     await getTrafficLights();
+
+    // Assign orientations to traffic lights to create opposing pairs
+    assignTrafficLightOrientations();
 
 
 
@@ -83,13 +136,67 @@ async function main() {
     drawScene();
 }
 
+// Assign orientations to traffic lights to create opposing pairs
+function assignTrafficLightOrientations() {
+    const processed = new Set();
+
+    for (let i = 0; i < trafficLights.length; i++) {
+        if (processed.has(i)) continue;
+
+        const tl = trafficLights[i];
+        let foundPair = false;
+
+        // Look for nearby traffic light to form a pair
+        for (let j = i + 1; j < trafficLights.length; j++) {
+            if (processed.has(j)) continue;
+
+            const other = trafficLights[j];
+            const dx = Math.abs(tl.position.x - other.position.x);
+            const dz = Math.abs(tl.position.z - other.position.z);
+
+            // If close and aligned on same axis, they're a pair
+            if ((dx <= 3 && dz === 0) || (dz <= 3 && dx === 0)) {
+                if (dx > dz) {
+                    // Horizontal pair
+                    if (tl.position.x < other.position.x) {
+                        tl.orientation = "Right";
+                        other.orientation = "Left";
+                    } else {
+                        tl.orientation = "Left";
+                        other.orientation = "Right";
+                    }
+                } else {
+                    // Vertical pair
+                    if (tl.position.z < other.position.z) {
+                        tl.orientation = "Up";
+                        other.orientation = "Down";
+                    } else {
+                        tl.orientation = "Down";
+                        other.orientation = "Up";
+                    }
+                }
+                processed.add(i);
+                processed.add(j);
+                foundPair = true;
+                break;
+            }
+        }
+
+        // Default if no pair found
+        if (!foundPair) {
+            tl.orientation = "Left";
+            processed.add(i);
+        }
+    }
+}
+
 function setupScene() {
     let camera = new Camera3D(0,
-        10,             // Distance to target
-        4,              // Azimut
-        0.8,              // Elevation
-        [0, 0, 10],
-        [0, 0, 0]);
+        settings.camera.distance,      // Distance to target
+        settings.camera.azimuth,       // Azimut
+        settings.camera.elevation,     // Elevation
+        [0, 0, 10],                    // Initial position
+        [settings.camera.targetX, settings.camera.targetY, settings.camera.targetZ]); // Target
     // These values are empyrical.
     // Maybe find a better way to determine them
     camera.panOffset = [0, 8, 0];
@@ -180,6 +287,15 @@ function setupObjects(scene, gl, programInfo) {
         destination.scale = { x: 0.5, y: 0.08, z: 0.5 };
         scene.addObject(destination);
     }
+
+    // TRAFFIC LIGHTS - 3D Model
+    for (const trafficLight of trafficLights) {
+        trafficLight.arrays = trafficLightGeometry.arrays;
+        trafficLight.bufferInfo = trafficLightGeometry.bufferInfo;
+        trafficLight.vao = trafficLightGeometry.vao;
+        trafficLight.scale = { x: 0.5, y: 0.5, z: 0.5 };
+        scene.addObject(trafficLight);
+    }
 }
 
 function checkForNewCars() {
@@ -206,16 +322,45 @@ function checkForNewCars() {
     }
 }
 
+// Convert orientation string to rotation angle (in radians)
+function getRotationFromOrientation(orientation) {
+    // The car model faces EAST by default, we rotate around Y axis
+    switch (orientation) {
+        case "Up":
+            return -Math.PI / 2;         // -90° - rotate left from East to face North
+        case "Down":
+            return Math.PI / 2;          // 90° - rotate right from East to face South
+        case "Left":
+            return Math.PI;              // 180° - rotate backwards from East to face West
+        case "Right":
+            return 0;                    // 0° - already facing East
+        default:
+            return 0;
+    }
+}
+
 // Draw an object with its corresponding transformations
 function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     // Prepare the vector for translation and scale
-    let v3_tra = object.posArray;
+    // Add 0.5 offset to center objects in their grid cell
+    let v3_tra = [
+        object.posArray[0] + 0.5,
+        object.posArray[1],
+        object.posArray[2] + 0.5
+    ];
     let v3_sca = object.scaArray;
 
     // Create the individual transform matrices
     const scaMat = M4.scale(v3_sca);
     const rotXMat = M4.rotationX(object.rotRad.x);
-    const rotYMat = M4.rotationY(object.rotRad.y);
+
+    // Apply orientation-based rotation for cars (around Y axis)
+    let rotYAngle = object.rotRad.y;
+    if (object.orientation) {
+        rotYAngle += getRotationFromOrientation(object.orientation);
+    }
+    const rotYMat = M4.rotationY(rotYAngle);
+
     const rotZMat = M4.rotationZ(object.rotRad.z);
     const traMat = M4.translation(v3_tra);
 
@@ -302,15 +447,58 @@ function setupViewProjection(gl) {
 // Setup a ui.
 function setupUI() {
     const gui = new GUI();
-  
-    // Settings for the animation
-    const animFolder = gui.addFolder('Animation:');
-    animFolder.add( settings.rotationSpeed, 'x', 0, 360)
+
+    // Settings for the camera
+    const camFolder = gui.addFolder('Camera Controls');
+
+    // Distance (Zoom)
+    camFolder.add(settings.camera, 'distance', 5, 50)
+        .decimals(1)
+        .name('Distance (Zoom)')
+        .onChange((value) => {
+            scene.camera.distance = value;
+        });
+
+    // Azimuth (Horizontal rotation)
+    camFolder.add(settings.camera, 'azimuth', 0, Math.PI * 2)
         .decimals(2)
-    animFolder.add( settings.rotationSpeed, 'y', 0, 360)
+        .name('Azimuth (Horizontal)')
+        .onChange((value) => {
+            scene.camera.azimuth = value;
+        });
+
+    // Elevation (Vertical rotation)
+    camFolder.add(settings.camera, 'elevation', -Math.PI / 2 + 0.1, Math.PI / 2 - 0.1)
         .decimals(2)
-    animFolder.add( settings.rotationSpeed, 'z', 0, 360)
-        .decimals(2)
+        .name('Elevation (Vertical)')
+        .onChange((value) => {
+            scene.camera.elevation = value;
+        });
+
+    // Target position
+    const targetFolder = camFolder.addFolder('Target Position');
+    targetFolder.add(settings.camera, 'targetX', -20, 20)
+        .decimals(1)
+        .name('Target X')
+        .onChange((value) => {
+            scene.camera.target.x = value;
+        });
+
+    targetFolder.add(settings.camera, 'targetY', -10, 10)
+        .decimals(1)
+        .name('Target Y')
+        .onChange((value) => {
+            scene.camera.target.y = value;
+        });
+
+    targetFolder.add(settings.camera, 'targetZ', -20, 20)
+        .decimals(1)
+        .name('Target Z')
+        .onChange((value) => {
+            scene.camera.target.z = value;
+        });
+
+    camFolder.open();
 }
 
 //Load a .obj model from a file path
