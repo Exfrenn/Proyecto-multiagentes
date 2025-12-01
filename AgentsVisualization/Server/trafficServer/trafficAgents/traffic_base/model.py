@@ -118,6 +118,15 @@ class CityModel(Model):
                         agent = PedestrianWalk(self, grid_cell, road_direction)
 
         self.running = True
+        self.pedestrians_enabled = True
+
+    def set_spawn_interval(self, interval):
+        """Set the spawn interval for cars and pedestrians."""
+        self.spawn_interval = max(1, int(interval))
+    
+    def set_pedestrians_enabled(self, enabled):
+        """Enable or disable pedestrian spawning."""
+        self.pedestrians_enabled = enabled
 
     def step(self):
         """Advance model by one step."""
@@ -146,7 +155,7 @@ class CityModel(Model):
                         Car(self, car_spawn_cell, destination=None)
                         
             
-            if active_pedestrians_count < self.max_pedestrians:
+            if self.pedestrians_enabled and active_pedestrians_count < self.max_pedestrians:
                 pedestrian_spawn_position = self.random.choice(self.pedestrian_spawn_positions)
                 pedestrian_spawn_cell = self.grid[pedestrian_spawn_position]
                 

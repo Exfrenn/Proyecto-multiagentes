@@ -19,8 +19,10 @@ def initModel():
 
     if request.method == 'POST':
         try:
-            noa = int(request.json['NAgents'])
-            city_model = CityModel(initial_agents_count=noa)
+            noa = int(request.json.get('NAgents', 10))
+            seed = int(request.json.get('seed', 42))
+            spawn_interval = int(request.json.get('spawnInterval', 10))
+            city_model = CityModel(initial_agents_count=noa, seed=seed, spawn_interval=spawn_interval)
             currentStep = 0
         except Exception as e:
             print(e)
@@ -32,6 +34,51 @@ def initModel():
     print(f"Model parameters: {noa,width,height}")
     
     return jsonify({"message": "Model initialized"}), 200
+
+
+@app.route('/setSpawnInterval', methods = ['POST'])
+@cross_origin()
+def setSpawnInterval():
+    global city_model
+    try:
+        interval = int(request.json.get('interval', 10))
+        city_model.set_spawn_interval(interval)
+        return jsonify({"message": f"Spawn interval set to {interval}", "interval": interval}), 200
+    except Exception as e:
+        print(e)
+        return jsonify({"message": "Error setting spawn interval", "error": str(e)}), 500
+
+
+@app.route('/setPedestriansEnabled', methods = ['POST'])
+@cross_origin()
+def setPedestriansEnabled():
+    global city_model
+    try:
+        enabled = request.json.get('enabled', True)
+        city_model.set_pedestrians_enabled(enabled)
+        return jsonify({"message": f"Pedestrians {'enabled' if enabled else 'disabled'}", "enabled": enabled}), 200
+    except Exception as e:
+        print(e)
+        return jsonify({"message": "Error setting pedestrians enabled", "error": str(e)}), 500
+
+
+@app.route('/reset', methods = ['POST'])
+@cross_origin()
+def resetModel():
+    global currentStep, city_model, noa
+    try:
+        seed = int(request.json.get('seed', 42))
+        spawn_interval = int(request.json.get('spawnInterval', 10))
+        pedestrians_enabled = request.json.get('pedestriansEnabled', True)
+        
+        city_model = CityModel(initial_agents_count=noa, seed=seed, spawn_interval=spawn_interval)
+        city_model.set_pedestrians_enabled(pedestrians_enabled)
+        currentStep = 0
+        
+        return jsonify({"message": f"Model reset with seed {seed}"}), 200
+    except Exception as e:
+        print(e)
+        return jsonify({"message": "Error resetting model", "error": str(e)}), 500
 
 
 @app.route('/getAgents', methods = ['GET'])
