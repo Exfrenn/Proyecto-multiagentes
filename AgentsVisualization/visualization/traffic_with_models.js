@@ -320,6 +320,13 @@ function setupObjects(scene, gl, programInfo) {
         src: '../assets/textures/Road/psidewalk.jpg'
     });
 
+    // Load road texture
+    const destinationTexture = twgl.createTexture(gl, {
+        min: gl.NEAREST,
+        mag: gl.NEAREST,
+        src: '../assets/textures/Road/destination.jpg'
+    });
+
     // Create textured cube for roads
     const roadCube = new Object3D(-1);
     roadCube.arrays = cubeTextured(1);
@@ -389,11 +396,15 @@ function setupObjects(scene, gl, programInfo) {
 
     // DESTINATIONS - Green
     for (const destination of destinations) {
-        destination.arrays = baseCube.arrays;
-        destination.bufferInfo = baseCube.bufferInfo;
-        destination.vao = baseCube.vao;
+        destination.arrays = roadCube.arrays;
+        destination.bufferInfo = roadCube.bufferInfo;
+        destination.vao = roadCube.vao;
         destination.scale = { x: 0.5, y: 0.08, z: 0.5 };
         destination.color = [0.0, 1.0, 0.0, 1.0]; // Green
+        destination.texture = destinationTexture;
+        destination.programInfo = textureProgramInfo; // Use texture program
+        destination.useWorldUV = true;
+        destination.uvScale = 1.0;
         scene.addObject(destination);
     }
 
