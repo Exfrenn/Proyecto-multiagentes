@@ -47,6 +47,16 @@ const settings = {
     seed: 42,
     rotationSpeed: { x: 0, y: 0, z: 0 },
 
+    // Camera settings
+    camera: {
+        distance: 27.4,
+        azimuth: 1.98,
+        elevation: 1.27,
+        targetX: 20.0,
+        targetY: -3.0,
+        targetZ: 10.0
+    },
+
     // Action functions for buttons
     resetSimulation: async function () {
         console.log("Resetting simulation...");
@@ -690,9 +700,8 @@ async function drawScene() {
     if (elapsed >= duration) {
         elapsed = 0;
         await update();
-        checkForNewCars();
-        checkForNewPedestrians();
         updateSceneAgents();
+        checkForNewPedestrians();
     }
 
     requestAnimationFrame(drawScene);
@@ -772,24 +781,42 @@ function setupUI() {
     const cameraFolder = gui.addFolder('Camera Controls');
     cameraFolder.add(scene.camera, 'distance', 10, 100, 0.1)
         .name('Distance (Zoom)')
-        .listen();
+        .listen()
+        .onChange((value) => {
+            settings.camera.distance = value;
+        });
     cameraFolder.add(scene.camera, 'azimuth', -Math.PI, Math.PI, 0.01)
         .name('Azimuth (Horizontal)')
-        .listen();
+        .listen()
+        .onChange((value) => {
+            settings.camera.azimuth = value;
+        });
     cameraFolder.add(scene.camera, 'elevation', -1.5, 1.5, 0.01)
         .name('Elevation (Vertical)')
-        .listen();
+        .listen()
+        .onChange((value) => {
+            settings.camera.elevation = value;
+        });
 
     const targetFolder = gui.addFolder('Target Position');
     targetFolder.add(scene.camera.target, 'x', -50, 50, 0.1)
         .name('Target X')
-        .listen();
+        .listen()
+        .onChange((value) => {
+            settings.camera.targetX = value;
+        });
     targetFolder.add(scene.camera.target, 'y', -50, 50, 0.1)
         .name('Target Y')
-        .listen();
+        .listen()
+        .onChange((value) => {
+            settings.camera.targetY = value;
+        });
     targetFolder.add(scene.camera.target, 'z', -50, 50, 0.1)
         .name('Target Z')
-        .listen();
+        .listen()
+        .onChange((value) => {
+            settings.camera.targetZ = value;
+        });
 
     // ========== SIMULATION CONTROLS ==========
     const simFolder = gui.addFolder('Simulation Controls');
@@ -844,6 +871,26 @@ function createBufferAndVAO(gl, programInfo, arrays) {
     const bufferInfo = twgl.createBufferInfoFromArrays(gl, arrays);
     const vao = twgl.createVAOFromBufferInfo(gl, programInfo, bufferInfo);
     return { arrays, bufferInfo, vao };
+}
+
+// Helper function to create a colored cube
+function createColoredCube(color) {
+    const cube = new Object3D(-1);
+    cube.prepareVAO(gl, colorProgramInfo);
+
+    // Add color data
+    const numVertices = cube.arrays.a_position.data.length / 3;
+    const colorData = [];
+    for (let i = 0; i < numVertices; i++) {
+        colorData.push(...color); // Spread the RGBA values
+    }
+    cube.arrays.a_color.data = colorData;
+
+    // Recreate buffers with new color data
+    cube.bufferInfo = twgl.createBufferInfoFromArrays(gl, cube.arrays);
+    cube.vao = twgl.createVAOFromBufferInfo(gl, colorProgramInfo, cube.bufferInfo);
+
+    return cube;
 }
 
 
