@@ -15,7 +15,9 @@ import {
     agents, obstacles, initAgentsModel,
     update, getAgents, getObstacles, getRoads,
     roads, getDestinations, destinations, getTrafficLights, trafficLights,
-    getSidewalks, sidewalks, getPedestrianWalks, pedestrianWalks
+    getSidewalks, sidewalks, getPedestrianWalks, pedestrianWalks,
+    setSpawnInterval, setPedestriansEnabled, resetSimulation as apiResetSimulation, simulationSettings,
+    pedestrians, getPedestrians
 } from '../libs/api_connection.js';
 
 // Define the shader code, using GLSL 3.00
@@ -37,20 +39,53 @@ const duration = 1000; // ms
 let elapsed = 0;
 let then = 0;
 
+
+// UI Settings
 const settings = {
-    rotationSpeed: {
-        x: 0,
-        y: 0,
-        z: 0
+    spawnRate: 10,  // Lower = faster spawning (spawn interval)
+    pedestriansEnabled: true,
+    seed: 42,
+    rotationSpeed: { x: 0, y: 0, z: 0 },
+
+    // Action functions for buttons
+    resetSimulation: async function () {
+        console.log("Resetting simulation...");
+        const success = await apiResetSimulation(settings.seed);
+        if (success) {
+            // Clear the scene objects (keep only static elements like roads)
+            scene.objects = scene.objects.filter(obj => {
+                // Keep roads, obstacles, sidewalks, etc. (non-agent objects)
+                return !agents.includes(obj) && !pedestrians.includes(obj);
+            });
+
+            // Reload static elements and agents
+            await getObstacles();
+            await getRoads();
+            await getDestinations();
+            await getSidewalks();
+            await getPedestrianWalks();
+            await getTrafficLights();
+            await getAgents();
+            await getPedestrians();
+
+            // Re-setup objects
+            setupObjects(scene, gl, colorProgramInfo);
+            console.log("Simulation reset complete!");
+        }
     },
-    camera: {
-        distance: 27.4,
-        azimuth: 1.98,
-        elevation: 1.27,
-        targetX: 20.0,
-        targetY: -3.0,
-        targetZ: 10.0
+
+    togglePedestrians: async function () {
+        settings.pedestriansEnabled = !settings.pedestriansEnabled;
+        await setPedestriansEnabled(settings.pedestriansEnabled);
+        console.log(`Pedestrians ${settings.pedestriansEnabled ? 'enabled' : 'disabled'}`);
     }
+};
+
+// Store geometry for pedestrians
+const pedestrianGeometry = {
+    arrays: null,
+    bufferInfo: null,
+    vao: null
 };
 
 // Store geometry for dynamic agents
@@ -166,6 +201,7 @@ async function main() {
     await getSidewalks();
     await getPedestrianWalks();
     await getTrafficLights();
+    await getPedestrians();
 
     // Assign orientations to traffic lights to create opposing pairs
     assignTrafficLightOrientations();
@@ -394,6 +430,10 @@ function setupObjects(scene, gl, programInfo) {
     }
 
     // DESTINATIONS - Green
+<<<<<<< HEAD
+=======
+    const destinationCube = createColoredCube([0.0, 1.0, 0.0, 1.0]);
+>>>>>>> 314131184bef9815117907842d2a786063f2ce0a
     for (const destination of destinations) {
         destination.arrays = roadCube.arrays;
         destination.bufferInfo = roadCube.bufferInfo;
@@ -407,6 +447,7 @@ function setupObjects(scene, gl, programInfo) {
         scene.addObject(destination);
     }
 
+
     // TRAFFIC LIGHTS - 3D Model
     for (const trafficLight of trafficLights) {
         trafficLight.arrays = trafficLightGeometry.arrays;
@@ -415,6 +456,30 @@ function setupObjects(scene, gl, programInfo) {
         trafficLight.scale = { x: 0.5, y: 0.5, z: 0.5 };
         // trafficLight.color is already set in the model loader or defaults
         scene.addObject(trafficLight);
+    }
+
+    // PEDESTRIANS - Blue cubes
+    const baseCubeForPed = new Object3D(-1);
+    baseCubeForPed.prepareVAO(gl, programInfo);
+
+    // Add color data for pedestrians (blue)
+    const numVerticesPed = baseCubeForPed.arrays.a_position.data.length / 3;
+    const colorDataPed = [];
+    for (let i = 0; i < numVerticesPed; i++) {
+        colorDataPed.push(0.2, 0.4, 1.0, 1.0); // Blue
+    }
+    baseCubeForPed.arrays.a_color.data = colorDataPed;
+
+    pedestrianGeometry.arrays = baseCubeForPed.arrays;
+    pedestrianGeometry.bufferInfo = baseCubeForPed.bufferInfo;
+    pedestrianGeometry.vao = baseCubeForPed.vao;
+
+    for (const ped of pedestrians) {
+        ped.arrays = pedestrianGeometry.arrays;
+        ped.bufferInfo = pedestrianGeometry.bufferInfo;
+        ped.vao = pedestrianGeometry.vao;
+        ped.scale = { x: 0.15, y: 0.3, z: 0.15 };
+        scene.addObject(ped);
     }
 }
 
@@ -469,6 +534,29 @@ function getRotationFromOrientation(orientation) {
             return 0;                    // 0° - already facing East
         default:
             return 0;
+    }
+}
+
+function checkForNewPedestrians() {
+    // Use the pedestrian geometry
+    if (!pedestrianGeometry.vao) {
+        console.warn("Pedestrian geometry not initialized");
+        return;
+    }
+
+    for (const ped of pedestrians) {
+        const existsInScene = scene.objects.find(obj => obj.id == ped.id);
+        if (!existsInScene) {
+            // Copy visual properties from pedestrian geometry
+            ped.arrays = pedestrianGeometry.arrays;
+            ped.bufferInfo = pedestrianGeometry.bufferInfo;
+            ped.vao = pedestrianGeometry.vao;
+
+            // Set appearance - smaller blue cubes for pedestrians
+            ped.scale = { x: 0.15, y: 0.3, z: 0.15 };
+
+            scene.addObject(ped);
+        }
     }
 }
 
@@ -605,7 +693,12 @@ async function drawScene() {
     if (elapsed >= duration) {
         elapsed = 0;
         await update();
+<<<<<<< HEAD
         updateSceneAgents();
+=======
+        checkForNewCars();
+        checkForNewPedestrians();
+>>>>>>> 314131184bef9815117907842d2a786063f2ce0a
     }
 
     requestAnimationFrame(drawScene);
@@ -679,63 +772,64 @@ function setupViewProjection(gl) {
 // Setup a ui.
 function setupUI() {
     const gui = new GUI();
+    gui.title('Controls');
 
-    // Settings for the camera
-    const camFolder = gui.addFolder('Camera Controls');
-
-    // Distance (Zoom)
-    camFolder.add(settings.camera, 'distance', 5, 50)
-        .decimals(1)
+    // ========== CAMERA CONTROLS ==========
+    const cameraFolder = gui.addFolder('Camera Controls');
+    cameraFolder.add(scene.camera, 'distance', 10, 100, 0.1)
         .name('Distance (Zoom)')
-        .onChange((value) => {
-            scene.camera.distance = value;
-        });
-
-    // Azimuth (Horizontal rotation)
-    camFolder.add(settings.camera, 'azimuth', 0, Math.PI * 2)
-        .decimals(2)
+        .listen();
+    cameraFolder.add(scene.camera, 'azimuth', -Math.PI, Math.PI, 0.01)
         .name('Azimuth (Horizontal)')
-        .onChange((value) => {
-            scene.camera.azimuth = value;
-        });
-
-    // Elevation (Vertical rotation)
-    camFolder.add(settings.camera, 'elevation', -Math.PI / 2 + 0.1, Math.PI / 2 - 0.1)
-        .decimals(2)
+        .listen();
+    cameraFolder.add(scene.camera, 'elevation', -1.5, 1.5, 0.01)
         .name('Elevation (Vertical)')
-        .onChange((value) => {
-            scene.camera.elevation = value;
-        });
+        .listen();
 
-    // Target position
-    const targetFolder = camFolder.addFolder('Target Position');
-    targetFolder.add(settings.camera, 'targetX', -20, 20)
-        .decimals(1)
+    const targetFolder = gui.addFolder('Target Position');
+    targetFolder.add(scene.camera.target, 'x', -50, 50, 0.1)
         .name('Target X')
-        .onChange((value) => {
-            scene.camera.target.x = value;
-        });
-
-    targetFolder.add(settings.camera, 'targetY', -10, 10)
-        .decimals(1)
+        .listen();
+    targetFolder.add(scene.camera.target, 'y', -50, 50, 0.1)
         .name('Target Y')
-        .onChange((value) => {
-            scene.camera.target.y = value;
-        });
-
-    targetFolder.add(settings.camera, 'targetZ', -20, 20)
-        .decimals(1)
+        .listen();
+    targetFolder.add(scene.camera.target, 'z', -50, 50, 0.1)
         .name('Target Z')
-        .onChange((value) => {
-            scene.camera.target.z = value;
+        .listen();
+
+    // ========== SIMULATION CONTROLS ==========
+    const simFolder = gui.addFolder('Simulation Controls');
+
+    // Spawn rate slider (1 = very fast, 30 = slow)
+    simFolder.add(settings, 'spawnRate', 1, 30, 1)
+        .name('Spawn Interval')
+        .onChange(async (value) => {
+            await setSpawnInterval(value);
+            console.log(`Spawn interval set to ${value}`);
         });
 
-    camFolder.open();
+    // Pedestrians toggle
+    simFolder.add(settings, 'pedestriansEnabled')
+        .name('Pedestrians Enabled')
+        .onChange(async (value) => {
+            await setPedestriansEnabled(value);
+            console.log(`Pedestrians ${value ? 'enabled' : 'disabled'}`);
+        });
+
+    // Seed input
+    simFolder.add(settings, 'seed', 1, 9999, 1)
+        .name('Random Seed');
+
+    // Reset button
+    simFolder.add(settings, 'resetSimulation')
+        .name('🔄 Reset Simulation');
+
+    simFolder.open();
 }
 
 //Load a .obj model from a file path
 async function loadModel(path) {
-    console.log(`📦 Loading model: ${path}`);
+    console.log(`Loading model: ${path}`);
     try {
         const response = await fetch(path);
         if (!response.ok) {
@@ -743,10 +837,10 @@ async function loadModel(path) {
         }
         const objText = await response.text();
         const arrays = loadObj(objText);
-        console.log(`✅ Loaded ${path}`);
+        console.log(`Loaded ${path}`);
         return arrays;
     } catch (error) {
-        console.error(`❌ Error loading ${path}:`, error);
+        console.error(`Error loading ${path}:`, error);
         throw error;
     }
 }
