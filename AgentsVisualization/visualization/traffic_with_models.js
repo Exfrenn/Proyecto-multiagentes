@@ -139,7 +139,7 @@ async function main() {
     trafficLightGeometry.vao = stoplightModel.vao;
 
     // Load building model
-    const buildingArrays = await loadModel('../assets/models/AddedModels/shop 1.obj.obj');
+    const buildingArrays = await loadModel('../assets/models/building_1.obj');
 
     // Add color data to the building model (light gray)
     const numVerticesB = buildingArrays.a_position.data.length / 3;
@@ -288,12 +288,11 @@ function setupObjects(scene, gl, programInfo) {
     }
 
     // OBSTACLES (buildings) - Gray
-    // OBSTACLES (buildings) - Gray
     for (const agent of obstacles) {
         agent.arrays = buildingGeometry.arrays;
         agent.bufferInfo = buildingGeometry.bufferInfo;
         agent.vao = buildingGeometry.vao;
-        agent.scale = { x: 0.05, y: 0.05, z: 0.05 }; // Adjust scale as needed for the new model
+        agent.scale = { x: 0.5, y: 0.5, z: 0.5 }; // Adjust scale as needed for the new model
         agent.color = [0.6, 0.6, 0.6, 1.0]; // Gray
         scene.addObject(agent);
     }
