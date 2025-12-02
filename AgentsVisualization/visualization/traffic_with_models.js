@@ -7,6 +7,8 @@ import { Scene3D } from '../libs/scene3d';
 import { Object3D } from '../libs/object3d';
 import { Camera3D } from '../libs/camera3d';
 import { loadObj } from '../libs/obj_loader.js';
+import { Light3D } from '../libs/light3d';
+import { cubeTextured, skyboxCube } from '../libs/shapes';
 
 // Functions and arrays for the communication with the API
 import {
@@ -19,17 +21,24 @@ import {
 } from '../libs/api_connection.js';
 
 // Define the shader code, using GLSL 3.00
-import vsGLSL from '../assets/shaders/vs_color.glsl?raw';
-import fsGLSL from '../assets/shaders/fs_color.glsl?raw';
+import vsGLSL from '../assets/shaders/vs_phong.glsl?raw';
+import fsGLSL from '../assets/shaders/fs_phong.glsl?raw';
+import vsTextureGLSL from '../assets/shaders/vs_phong_textures.glsl?raw';
+import fsTextureGLSL from '../assets/shaders/fs_phong_textures.glsl?raw';
+import vsSkyboxGLSL from '../assets/shaders/vs_flat_textures.glsl?raw';
+import fsSkyboxGLSL from '../assets/shaders/fs_flat_textures.glsl?raw';
 
 const scene = new Scene3D();
 
 // Global variables
 let colorProgramInfo = undefined;
+let textureProgramInfo = undefined;
+let skyboxProgramInfo = undefined;
 let gl = undefined;
 const duration = 1000; // ms
 let elapsed = 0;
 let then = 0;
+
 
 // UI Settings
 const settings = {
@@ -37,9 +46,19 @@ const settings = {
     pedestriansEnabled: true,
     seed: 42,
     rotationSpeed: { x: 0, y: 0, z: 0 },
-    
+
+    // Camera settings
+    camera: {
+        distance: 27.4,
+        azimuth: 1.98,
+        elevation: 1.27,
+        targetX: 20.0,
+        targetY: -3.0,
+        targetZ: 10.0
+    },
+
     // Action functions for buttons
-    resetSimulation: async function() {
+    resetSimulation: async function () {
         console.log("Resetting simulation...");
         const success = await apiResetSimulation(settings.seed);
         if (success) {
@@ -48,7 +67,7 @@ const settings = {
                 // Keep roads, obstacles, sidewalks, etc. (non-agent objects)
                 return !agents.includes(obj) && !pedestrians.includes(obj);
             });
-            
+
             // Reload static elements and agents
             await getObstacles();
             await getRoads();
@@ -58,14 +77,14 @@ const settings = {
             await getTrafficLights();
             await getAgents();
             await getPedestrians();
-            
+
             // Re-setup objects
             setupObjects(scene, gl, colorProgramInfo);
             console.log("Simulation reset complete!");
         }
     },
-    
-    togglePedestrians: async function() {
+
+    togglePedestrians: async function () {
         settings.pedestriansEnabled = !settings.pedestriansEnabled;
         await setPedestriansEnabled(settings.pedestriansEnabled);
         console.log(`Pedestrians ${settings.pedestriansEnabled ? 'enabled' : 'disabled'}`);
@@ -86,6 +105,27 @@ const agentGeometry = {
     vao: null
 };
 
+// Store geometry for traffic lights
+const trafficLightGeometry = {
+    arrays: null,
+    bufferInfo: null,
+    vao: null
+};
+
+// Store geometry for the bulb
+const bulbGeometry = {
+    arrays: null,
+    bufferInfo: null,
+    vao: null
+};
+
+// Store geometry for buildings
+const buildingGeometry = {
+    arrays: null,
+    bufferInfo: null,
+    vao: null
+};
+
 // Main function is async to be able to make the requests
 async function main() {
     // Setup the canvas area
@@ -95,16 +135,70 @@ async function main() {
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
     // Prepare the program with the shaders
+    // Prepare the program with the shaders
     colorProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
+    colorProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
+    textureProgramInfo = twgl.createProgramInfo(gl, [vsTextureGLSL, fsTextureGLSL]);
+    skyboxProgramInfo = twgl.createProgramInfo(gl, [vsSkyboxGLSL, fsSkyboxGLSL]);
 
+    // Initialize bulb geometry (simple cube)
+    const bulbObject = new Object3D("bulb_geom");
+    bulbObject.prepareVAO(gl, colorProgramInfo);
+    bulbGeometry.arrays = bulbObject.arrays;
+    bulbGeometry.bufferInfo = bulbObject.bufferInfo;
+    bulbGeometry.vao = bulbObject.vao;
 
+    // Load car model
     const carArrays = await loadModel('../assets/models/car-2024-301.obj');
+
+    // Add color data to the model (magenta for cars)
+    const numVertices = carArrays.a_position.data.length / 3;
+    const colorData = [];
+    for (let i = 0; i < numVertices; i++) {
+        colorData.push(1.0, 0.0, 1.0, 1.0); // RGBA - Magenta
+    }
+    carArrays.a_color.data = colorData;
+
     const carModel = createBufferAndVAO(gl, colorProgramInfo, carArrays);
 
     // Guardar para uso posterior
     agentGeometry.arrays = carModel.arrays;
     agentGeometry.bufferInfo = carModel.bufferInfo;
     agentGeometry.vao = carModel.vao;
+
+    // Load traffic light model
+    const stoplightArrays = await loadModel('../assets/models/stoplight_1.obj');
+
+    // Add color data to the stoplight model (gray/dark for now)
+    const numVerticesSL = stoplightArrays.a_position.data.length / 3;
+    const colorDataSL = [];
+    for (let i = 0; i < numVerticesSL; i++) {
+        colorDataSL.push(0.2, 0.2, 0.2, 1.0); // Dark Gray
+    }
+    stoplightArrays.a_color.data = colorDataSL;
+
+    const stoplightModel = createBufferAndVAO(gl, colorProgramInfo, stoplightArrays);
+
+    trafficLightGeometry.arrays = stoplightModel.arrays;
+    trafficLightGeometry.bufferInfo = stoplightModel.bufferInfo;
+    trafficLightGeometry.vao = stoplightModel.vao;
+
+    // Load building model
+    const buildingArrays = await loadModel('../assets/models/building_1.obj');
+
+    // Add color data to the building model (light gray)
+    const numVerticesB = buildingArrays.a_position.data.length / 3;
+    const colorDataB = [];
+    for (let i = 0; i < numVerticesB; i++) {
+        colorDataB.push(0.7, 0.7, 0.7, 1.0); // Light Gray
+    }
+    buildingArrays.a_color.data = colorDataB;
+
+    const buildingModel = createBufferAndVAO(gl, colorProgramInfo, buildingArrays);
+
+    buildingGeometry.arrays = buildingModel.arrays;
+    buildingGeometry.bufferInfo = buildingModel.bufferInfo;
+    buildingGeometry.vao = buildingModel.vao;
 
     // Initialize the agents model
     await initAgentsModel();
@@ -118,6 +212,9 @@ async function main() {
     await getPedestrianWalks();
     await getTrafficLights();
     await getPedestrians();
+
+    // Assign orientations to traffic lights to create opposing pairs
+    assignTrafficLightOrientations();
 
 
 
@@ -134,18 +231,90 @@ async function main() {
     drawScene();
 }
 
+// Assign orientations to traffic lights to create opposing pairs
+function assignTrafficLightOrientations() {
+    const processed = new Set();
+
+    for (let i = 0; i < trafficLights.length; i++) {
+        if (processed.has(i)) continue;
+
+        const tl = trafficLights[i];
+        let foundPair = false;
+
+        // Look for nearby traffic light to form a pair
+        for (let j = i + 1; j < trafficLights.length; j++) {
+            if (processed.has(j)) continue;
+
+            const other = trafficLights[j];
+            const dx = Math.abs(tl.position.x - other.position.x);
+            const dz = Math.abs(tl.position.z - other.position.z);
+
+            // If close and aligned on same axis, they're a pair
+            if ((dx <= 3 && dz === 0) || (dz <= 3 && dx === 0)) {
+                if (dx > dz) {
+                    // Horizontal pair
+                    if (tl.position.x < other.position.x) {
+                        tl.orientation = "Right";
+                        other.orientation = "Left";
+                    } else {
+                        tl.orientation = "Left";
+                        other.orientation = "Right";
+                    }
+                } else {
+                    // Vertical pair
+                    if (tl.position.z < other.position.z) {
+                        tl.orientation = "Up";
+                        other.orientation = "Down";
+                    } else {
+                        tl.orientation = "Down";
+                        other.orientation = "Up";
+                    }
+                }
+                processed.add(i);
+                processed.add(j);
+                foundPair = true;
+                break;
+            }
+        }
+
+        // Default if no pair found
+        if (!foundPair) {
+            tl.orientation = "Left";
+            processed.add(i);
+        }
+    }
+}
+
 function setupScene() {
     let camera = new Camera3D(0,
-        10,             // Distance to target
-        4,              // Azimut
-        0.8,              // Elevation
-        [0, 0, 10],
-        [0, 0, 0]);
-    // These values are empyrical.
-    // Maybe find a better way to determine them
-    camera.panOffset = [0, 8, 0];
+        settings.camera.distance,      // Distance to target
+        settings.camera.azimuth,       // Azimut
+        settings.camera.elevation,     // Elevation
+        [0, 0, 10],                    // Initial position
+        [settings.camera.targetX, settings.camera.targetY, settings.camera.targetZ]); // Target
     scene.setCamera(camera);
     scene.camera.setupControls();
+    // Add a light to the scene
+    let light = new Light3D(0, [15, 15, 15],           // Position
+        [0.5, 0.5, 0.5, 1.0],   // Ambient
+        [1.0, 1.0, 1.0, 1.0],   // Diffuse
+        [1.0, 1.0, 1.0, 1.0]);  // Specular
+    scene.addLight(light);
+
+    // Setup skybox
+    const skybox = new Object3D("skybox", [15, 0, 15]); // Center roughly in the middle of the city
+    skybox.arrays = skyboxCube(1); // Use generated cube with UVs
+    skybox.bufferInfo = twgl.createBufferInfoFromArrays(gl, skybox.arrays);
+    skybox.vao = twgl.createVAOFromBufferInfo(gl, skyboxProgramInfo, skybox.bufferInfo);
+    skybox.scale = { x: 50, y: 50, z: 50 }; // Large scale
+    skybox.texture = twgl.createTexture(gl, {
+        src: '../assets/textures/Skyboxes/Cubemap_Sky_08-512x512.png',
+        min: gl.LINEAR,
+        mag: gl.LINEAR,
+        wrap: gl.CLAMP_TO_EDGE
+    });
+    skybox.programInfo = skyboxProgramInfo;
+    scene.addObject(skybox);
 }
 
 function setupObjects(scene, gl, programInfo) {
@@ -153,107 +322,182 @@ function setupObjects(scene, gl, programInfo) {
     const baseCube = new Object3D(-1);
     baseCube.prepareVAO(gl, programInfo);
 
-
-    // Helper function to create colored cube
-    function createColoredCube(color) {
-        const cube = new Object3D(-1);
-        cube.prepareVAO(gl, programInfo);
-
-        const numVertices = cube.arrays.a_color.data.length / 4;
-        for (let i = 0; i < numVertices; i++) {
-            const offset = i * 4;
-            cube.arrays.a_color.data[offset + 0] = color[0];
-            cube.arrays.a_color.data[offset + 1] = color[1];
-            cube.arrays.a_color.data[offset + 2] = color[2];
-            cube.arrays.a_color.data[offset + 3] = color[3];
-        }
-
-        cube.bufferInfo = twgl.createBufferInfoFromArrays(gl, cube.arrays);
-        cube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, cube.bufferInfo);
-        return cube;
-    }
-
     // AGENTS (cars) - Magenta
     for (const agent of agents) {
         agent.arrays = agentGeometry.arrays;
         agent.bufferInfo = agentGeometry.bufferInfo;
         agent.vao = agentGeometry.vao;
         agent.scale = { x: 0.2, y: 0.2, z: 0.2 };
+        agent.color = [1.0, 0.0, 1.0, 1.0]; // Magenta
+        agent.isDynamic = true; // Mark as dynamic for updates
         scene.addObject(agent);
     }
 
     // OBSTACLES (buildings) - Gray
-    const obstacleCube = createColoredCube([0.8, 0.8, 0.8, 1.0]);
     for (const agent of obstacles) {
-        agent.arrays = obstacleCube.arrays;
-        agent.bufferInfo = obstacleCube.bufferInfo;
-        agent.vao = obstacleCube.vao;
-        agent.scale = { x: 0.5, y: 5, z: 0.5 };
+        agent.arrays = buildingGeometry.arrays;
+        agent.bufferInfo = buildingGeometry.bufferInfo;
+        agent.vao = buildingGeometry.vao;
+        agent.scale = { x: 0.5, y: 0.5, z: 0.5 }; // Adjust scale as needed for the new model
+        agent.color = [0.6, 0.6, 0.6, 1.0]; // Gray
         scene.addObject(agent);
     }
 
     // ROADS - Dark gray
-    const roadCube = createColoredCube([0.2, 0.2, 0.2, 1.0]);
+    // Load road texture
+    const roadTexture = twgl.createTexture(gl, {
+        min: gl.NEAREST,
+        mag: gl.NEAREST,
+        src: '../assets/textures/Road/asphalt.jpg'
+    });
+
+    // Load road texture
+    const sidewalkTexture = twgl.createTexture(gl, {
+        min: gl.NEAREST,
+        mag: gl.NEAREST,
+        src: '../assets/textures/Road/sidewalk1.jpg'
+    });
+
+    // Load road texture
+    const pedestrianWalkTexture = twgl.createTexture(gl, {
+        min: gl.NEAREST,
+        mag: gl.NEAREST,
+        src: '../assets/textures/Road/psidewalk.jpg'
+    });
+
+    // Load road texture
+    const destinationTexture = twgl.createTexture(gl, {
+        min: gl.NEAREST,
+        mag: gl.NEAREST,
+        src: '../assets/textures/Road/destination.jpg'
+    });
+
+    // Create textured cube for roads
+    const roadCube = new Object3D(-1);
+    roadCube.arrays = cubeTextured(1);
+    roadCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, roadCube.arrays);
+    roadCube.vao = twgl.createVAOFromBufferInfo(gl, textureProgramInfo, roadCube.bufferInfo);
+
     for (const road of roads) {
         road.arrays = roadCube.arrays;
         road.bufferInfo = roadCube.bufferInfo;
         road.vao = roadCube.vao;
         road.scale = { x: 1.0, y: 0.05, z: 1.0 };
+        road.color = [0.2, 0.2, 0.2, 1.0]; // Dark gray
+        road.texture = roadTexture;
+        road.programInfo = textureProgramInfo; // Use texture program
         scene.addObject(road);
     }
 
     // SIDEWALKS - Light gray
-    const sidewalkCube = createColoredCube([0.6, 0.6, 0.6, 1.0]);
     for (const sidewalk of sidewalks) {
-        sidewalk.arrays = sidewalkCube.arrays;
-        sidewalk.bufferInfo = sidewalkCube.bufferInfo;
-        sidewalk.vao = sidewalkCube.vao;
+        sidewalk.arrays = roadCube.arrays;
+        sidewalk.bufferInfo = roadCube.bufferInfo;
+        sidewalk.vao = roadCube.vao;
         sidewalk.scale = { x: 0.5, y: 0.08, z: 0.5 };
+        sidewalk.color = [0.8, 0.8, 0.8, 1.0]; // Light gray
+        sidewalk.texture = sidewalkTexture;
+        sidewalk.programInfo = textureProgramInfo; // Use texture program
         scene.addObject(sidewalk);
     }
 
-    // SIDEWALKS - Light gray
-    const pedestrianWalkCube = createColoredCube([1.0, 1.0, 0.0, 1.0]);
+    // PEDESTRIAN WALKS - Yellow
+    // Helper to check for neighbors
+    const pwSet = new Set(pedestrianWalks.map(p => `${p.position.x},${p.position.z}`));
+
     for (const pedestrianWalk of pedestrianWalks) {
-        pedestrianWalk.arrays = pedestrianWalkCube.arrays;
-        pedestrianWalk.bufferInfo = pedestrianWalkCube.bufferInfo;
-        pedestrianWalk.vao = pedestrianWalkCube.vao;
+        pedestrianWalk.arrays = roadCube.arrays;
+        pedestrianWalk.bufferInfo = roadCube.bufferInfo;
+        pedestrianWalk.vao = roadCube.vao;
         pedestrianWalk.scale = { x: 0.5, y: 0.08, z: 0.5 };
+        pedestrianWalk.color = [1.0, 1.0, 0.0, 1.0]; // Yellow
+        pedestrianWalk.texture = pedestrianWalkTexture;
+        pedestrianWalk.programInfo = textureProgramInfo; // Use texture program
+        pedestrianWalk.useWorldUV = true;
+        pedestrianWalk.uvScale = 1.0;
+
+        // Determine orientation based on neighbors
+        const x = pedestrianWalk.position.x;
+        const z = pedestrianWalk.position.z;
+        // Check horizontal neighbors (East-West)
+        const hasHorizontalNeighbor = pwSet.has(`${x + 1},${z}`) || pwSet.has(`${x - 1},${z}`);
+
+        // If it has horizontal neighbors, it's likely an East-West crossing.
+        // We want longitudinal stripes (parallel to traffic).
+        // Texture has horizontal lines (vary with V).
+
+        if (hasHorizontalNeighbor) {
+            // E-W Crossing (Traffic along X). Want lines along X.
+            // V should depend on Z (width). uv = xz (v=z).
+            pedestrianWalk.rotateUV = false;
+        } else {
+            // N-S Crossing (Traffic along Z). Want lines along Z.
+            // V should depend on X (width). uv = zx (v=x).
+            pedestrianWalk.rotateUV = true;
+        }
+
         scene.addObject(pedestrianWalk);
     }
 
     // DESTINATIONS - Green
     const destinationCube = createColoredCube([0.0, 1.0, 0.0, 1.0]);
     for (const destination of destinations) {
-        destination.arrays = destinationCube.arrays;
-        destination.bufferInfo = destinationCube.bufferInfo;
-        destination.vao = destinationCube.vao;
+        destination.arrays = roadCube.arrays;
+        destination.bufferInfo = roadCube.bufferInfo;
+        destination.vao = roadCube.vao;
         destination.scale = { x: 0.5, y: 0.08, z: 0.5 };
+        destination.color = [0.0, 1.0, 0.0, 1.0]; // Green
+        destination.texture = destinationTexture;
+        destination.programInfo = textureProgramInfo; // Use texture program
+        destination.useWorldUV = true;
+        destination.uvScale = 1.0;
         scene.addObject(destination);
     }
 
+
+    // TRAFFIC LIGHTS - 3D Model
+    for (const trafficLight of trafficLights) {
+        trafficLight.arrays = trafficLightGeometry.arrays;
+        trafficLight.bufferInfo = trafficLightGeometry.bufferInfo;
+        trafficLight.vao = trafficLightGeometry.vao;
+        trafficLight.scale = { x: 0.5, y: 0.5, z: 0.5 };
+        // trafficLight.color is already set in the model loader or defaults
+        scene.addObject(trafficLight);
+    }
+
     // PEDESTRIANS - Blue cubes
-    const pedestrianCube = createColoredCube([0.2, 0.4, 1.0, 1.0]);
-    pedestrianGeometry.arrays = pedestrianCube.arrays;
-    pedestrianGeometry.bufferInfo = pedestrianCube.bufferInfo;
-    pedestrianGeometry.vao = pedestrianCube.vao;
-    
+    const baseCubeForPed = new Object3D(-1);
+    baseCubeForPed.prepareVAO(gl, programInfo);
+
+    // Add color data for pedestrians (blue)
+    const numVerticesPed = baseCubeForPed.arrays.a_position.data.length / 3;
+    const colorDataPed = [];
+    for (let i = 0; i < numVerticesPed; i++) {
+        colorDataPed.push(0.2, 0.4, 1.0, 1.0); // Blue
+    }
+    baseCubeForPed.arrays.a_color.data = colorDataPed;
+
+    pedestrianGeometry.arrays = baseCubeForPed.arrays;
+    pedestrianGeometry.bufferInfo = baseCubeForPed.bufferInfo;
+    pedestrianGeometry.vao = baseCubeForPed.vao;
+
     for (const ped of pedestrians) {
-        ped.arrays = pedestrianCube.arrays;
-        ped.bufferInfo = pedestrianCube.bufferInfo;
-        ped.vao = pedestrianCube.vao;
+        ped.arrays = pedestrianGeometry.arrays;
+        ped.bufferInfo = pedestrianGeometry.bufferInfo;
+        ped.vao = pedestrianGeometry.vao;
         ped.scale = { x: 0.15, y: 0.3, z: 0.15 };
         scene.addObject(ped);
     }
 }
 
-function checkForNewCars() {
+function updateSceneAgents() {
     // Use the global geometry
     if (!agentGeometry.vao) {
         console.warn("Agent geometry not initialized");
         return;
     }
 
+    // 1. Add new agents
     for (const agent of agents) {
         const existsInScene = scene.objects.find(obj => obj.id == agent.id);
         if (!existsInScene) {
@@ -265,9 +509,38 @@ function checkForNewCars() {
             // Set appearance (matching setupObjects)
             agent.scale = { x: 0.2, y: 0.2, z: 0.2 };
             agent.color = [1.0, 0.0, 1.0, 1.0]; // Magenta for cars
+            agent.isDynamic = true; // Mark as dynamic
 
             scene.addObject(agent);
         }
+    }
+
+    // 2. Remove dead agents
+    // Filter scene.objects to remove dynamic objects that are no longer in the agents list
+    scene.objects = scene.objects.filter(obj => {
+        if (obj.isDynamic) {
+            // Check if this agent ID is still in the global 'agents' list
+            const stillActive = agents.some(a => a.id == obj.id);
+            return stillActive;
+        }
+        return true; // Keep static objects
+    });
+}
+
+// Convert orientation string to rotation angle (in radians)
+function getRotationFromOrientation(orientation) {
+    // The car model faces EAST by default, we rotate around Y axis
+    switch (orientation) {
+        case "Up":
+            return -Math.PI / 2;         // -90° - rotate left from East to face North
+        case "Down":
+            return Math.PI / 2;          // 90° - rotate right from East to face South
+        case "Left":
+            return Math.PI;              // 180° - rotate backwards from East to face West
+        case "Right":
+            return 0;                    // 0° - already facing East
+        default:
+            return 0;
     }
 }
 
@@ -297,13 +570,25 @@ function checkForNewPedestrians() {
 // Draw an object with its corresponding transformations
 function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     // Prepare the vector for translation and scale
-    let v3_tra = object.posArray;
+    // Add 0.5 offset to center objects in their grid cell
+    let v3_tra = [
+        object.posArray[0] + 0.5,
+        object.posArray[1],
+        object.posArray[2] + 0.5
+    ];
     let v3_sca = object.scaArray;
 
     // Create the individual transform matrices
     const scaMat = M4.scale(v3_sca);
     const rotXMat = M4.rotationX(object.rotRad.x);
-    const rotYMat = M4.rotationY(object.rotRad.y);
+
+    // Apply orientation-based rotation for cars (around Y axis)
+    let rotYAngle = object.rotRad.y;
+    if (object.orientation) {
+        rotYAngle += getRotationFromOrientation(object.orientation);
+    }
+    const rotYMat = M4.rotationY(rotYAngle);
+
     const rotZMat = M4.rotationZ(object.rotRad.z);
     const traMat = M4.translation(v3_tra);
 
@@ -321,10 +606,28 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     // World-View-Projection
     const wvpMat = M4.multiply(viewProjectionMatrix, transforms);
 
+    // The matrix to be used for normal transformations
+    const normalMat = M4.transpose(M4.inverse(object.matrix));
+
     // Model uniforms
     let objectUniforms = {
-        u_transforms: wvpMat
+        u_world: object.matrix,
+        u_worldInverseTransform: normalMat,
+        u_worldViewProjection: wvpMat,
+        u_ambientColor: object.color,
+        u_diffuseColor: object.color,
+        u_specularColor: [1.0, 1.0, 1.0, 1.0],
+        u_shininess: 50.0
+    };
+
+    // Add texture uniform if object has texture
+    if (object.texture) {
+        objectUniforms.u_texture = object.texture;
+        objectUniforms.u_useWorldUV = object.useWorldUV || false;
+        objectUniforms.u_rotateUV = object.rotateUV || false;
+        objectUniforms.u_uvScale = object.uvScale || 1.0;
     }
+
     twgl.setUniforms(programInfo, objectUniforms);
 
     gl.bindVertexArray(object.vao);
@@ -354,19 +657,100 @@ async function drawScene() {
 
     // Draw the objects
     gl.useProgram(colorProgramInfo.program);
-    for (let object of scene.objects) {
-        drawObject(gl, colorProgramInfo, object, viewProjectionMatrix, fract);
+
+    // Scene uniforms
+    const light = scene.lights[0];
+    let globalUniforms = {
+        u_lightWorldPosition: light.posArray,
+        u_viewWorldPosition: scene.camera.posArray,
+        u_ambientLight: light.ambient,
+        u_diffuseLight: light.diffuse,
+        u_specularLight: light.specular
     }
+    twgl.setUniforms(colorProgramInfo, globalUniforms);
+
+    for (let object of scene.objects) {
+        // Switch program if necessary
+        let currentProgramInfo = object.programInfo || colorProgramInfo;
+        gl.useProgram(currentProgramInfo.program);
+        twgl.setUniforms(currentProgramInfo, globalUniforms);
+
+        // Special handling for skybox
+        if (object.id === "skybox") {
+            gl.disable(gl.CULL_FACE);
+            gl.depthMask(false); // Optional: don't write to depth buffer
+        } else {
+            gl.enable(gl.CULL_FACE);
+            gl.depthMask(true);
+        }
+
+        drawObject(gl, currentProgramInfo, object, viewProjectionMatrix, fract);
+
+        // Restore state
+        if (object.id === "skybox") {
+            gl.enable(gl.CULL_FACE);
+            gl.depthMask(true);
+        }
+    }
+
+    // Draw traffic light bulbs
+    drawTrafficLightBulbs(gl, colorProgramInfo, viewProjectionMatrix);
 
     // Update the scene after the elapsed duration
     if (elapsed >= duration) {
         elapsed = 0;
         await update();
-        checkForNewCars();
+        updateSceneAgents();
         checkForNewPedestrians();
     }
 
     requestAnimationFrame(drawScene);
+}
+
+// Helper to draw traffic light bulbs
+function drawTrafficLightBulbs(gl, programInfo, viewProjectionMatrix) {
+    if (!bulbGeometry.vao) return;
+
+    // Create a temporary object for the bulb
+    // We'll use a small scale for the bulb
+    const bulbScale = { x: 0.15, y: 0.15, z: 0.15 };
+
+    for (const tl of trafficLights) {
+        // Determine color based on state
+        // Assuming state is boolean: true = Green, false = Red
+        // Or string: "Green", "Red"
+        let color = [1.0, 0.0, 0.0, 1.0]; // Default Red
+        let offset = { x: 0, y: 0, z: 0 };
+
+        // Check state (adjust logic based on actual server data)
+        // Adjust heights based on your specific traffic light model
+        if (tl.state === true || tl.state === "Green" || tl.state === "green") {
+            color = [0.0, 1.0, 0.0, 1.0]; // Green
+            // Green light position (lower)
+            offset = { x: 0, y: 2.2, z: 0 };
+        } else {
+            color = [1.0, 0.0, 0.0, 1.0]; // Red
+            // Red light position (higher)
+            offset = { x: 0, y: 2.6, z: 0 };
+        }
+
+        // Create the bulb object at the calculated position
+        const bulb = new Object3D("bulb", [
+            tl.position.x + offset.x,
+            tl.position.y + offset.y,
+            tl.position.z + offset.z
+        ]);
+
+        bulb.scale = bulbScale;
+        bulb.color = color;
+
+        // Use bulb geometry
+        bulb.arrays = bulbGeometry.arrays;
+        bulb.bufferInfo = bulbGeometry.bufferInfo;
+        bulb.vao = bulbGeometry.vao;
+
+        drawObject(gl, programInfo, bulb, viewProjectionMatrix, 0);
+    }
 }
 
 function setupViewProjection(gl) {
@@ -392,33 +776,51 @@ function setupViewProjection(gl) {
 function setupUI() {
     const gui = new GUI();
     gui.title('Controls');
-    
+
     // ========== CAMERA CONTROLS ==========
     const cameraFolder = gui.addFolder('Camera Controls');
     cameraFolder.add(scene.camera, 'distance', 10, 100, 0.1)
         .name('Distance (Zoom)')
-        .listen();
+        .listen()
+        .onChange((value) => {
+            settings.camera.distance = value;
+        });
     cameraFolder.add(scene.camera, 'azimuth', -Math.PI, Math.PI, 0.01)
         .name('Azimuth (Horizontal)')
-        .listen();
+        .listen()
+        .onChange((value) => {
+            settings.camera.azimuth = value;
+        });
     cameraFolder.add(scene.camera, 'elevation', -1.5, 1.5, 0.01)
         .name('Elevation (Vertical)')
-        .listen();
-    
+        .listen()
+        .onChange((value) => {
+            settings.camera.elevation = value;
+        });
+
     const targetFolder = gui.addFolder('Target Position');
     targetFolder.add(scene.camera.target, 'x', -50, 50, 0.1)
         .name('Target X')
-        .listen();
+        .listen()
+        .onChange((value) => {
+            settings.camera.targetX = value;
+        });
     targetFolder.add(scene.camera.target, 'y', -50, 50, 0.1)
         .name('Target Y')
-        .listen();
+        .listen()
+        .onChange((value) => {
+            settings.camera.targetY = value;
+        });
     targetFolder.add(scene.camera.target, 'z', -50, 50, 0.1)
         .name('Target Z')
-        .listen();
-    
+        .listen()
+        .onChange((value) => {
+            settings.camera.targetZ = value;
+        });
+
     // ========== SIMULATION CONTROLS ==========
     const simFolder = gui.addFolder('Simulation Controls');
-    
+
     // Spawn rate slider (1 = very fast, 30 = slow)
     simFolder.add(settings, 'spawnRate', 1, 30, 1)
         .name('Spawn Interval')
@@ -426,7 +828,7 @@ function setupUI() {
             await setSpawnInterval(value);
             console.log(`Spawn interval set to ${value}`);
         });
-    
+
     // Pedestrians toggle
     simFolder.add(settings, 'pedestriansEnabled')
         .name('Pedestrians Enabled')
@@ -434,15 +836,15 @@ function setupUI() {
             await setPedestriansEnabled(value);
             console.log(`Pedestrians ${value ? 'enabled' : 'disabled'}`);
         });
-    
+
     // Seed input
     simFolder.add(settings, 'seed', 1, 9999, 1)
         .name('Random Seed');
-    
+
     // Reset button
     simFolder.add(settings, 'resetSimulation')
         .name('🔄 Reset Simulation');
-    
+
     simFolder.open();
 }
 
@@ -469,6 +871,26 @@ function createBufferAndVAO(gl, programInfo, arrays) {
     const bufferInfo = twgl.createBufferInfoFromArrays(gl, arrays);
     const vao = twgl.createVAOFromBufferInfo(gl, programInfo, bufferInfo);
     return { arrays, bufferInfo, vao };
+}
+
+// Helper function to create a colored cube
+function createColoredCube(color) {
+    const cube = new Object3D(-1);
+    cube.prepareVAO(gl, colorProgramInfo);
+
+    // Add color data
+    const numVertices = cube.arrays.a_position.data.length / 3;
+    const colorData = [];
+    for (let i = 0; i < numVertices; i++) {
+        colorData.push(...color); // Spread the RGBA values
+    }
+    cube.arrays.a_color.data = colorData;
+
+    // Recreate buffers with new color data
+    cube.bufferInfo = twgl.createBufferInfoFromArrays(gl, cube.arrays);
+    cube.vao = twgl.createVAOFromBufferInfo(gl, colorProgramInfo, cube.bufferInfo);
+
+    return cube;
 }
 
 

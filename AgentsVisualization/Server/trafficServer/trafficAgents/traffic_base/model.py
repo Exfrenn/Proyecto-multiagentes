@@ -52,7 +52,7 @@ class CityModel(Model):
             (28, 28)
         ]
         self.pedestrian_spawn_positions = [
-            (10, 16)
+            (10, 15)
         ]
         self.max_cars = 10
         self.max_pedestrians = 5
