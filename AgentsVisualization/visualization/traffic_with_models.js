@@ -430,10 +430,7 @@ function setupObjects(scene, gl, programInfo) {
     }
 
     // DESTINATIONS - Green
-<<<<<<< HEAD
-=======
     const destinationCube = createColoredCube([0.0, 1.0, 0.0, 1.0]);
->>>>>>> 314131184bef9815117907842d2a786063f2ce0a
     for (const destination of destinations) {
         destination.arrays = roadCube.arrays;
         destination.bufferInfo = roadCube.bufferInfo;
@@ -693,12 +690,9 @@ async function drawScene() {
     if (elapsed >= duration) {
         elapsed = 0;
         await update();
-<<<<<<< HEAD
-        updateSceneAgents();
-=======
         checkForNewCars();
         checkForNewPedestrians();
->>>>>>> 314131184bef9815117907842d2a786063f2ce0a
+        updateSceneAgents();
     }
 
     requestAnimationFrame(drawScene);
