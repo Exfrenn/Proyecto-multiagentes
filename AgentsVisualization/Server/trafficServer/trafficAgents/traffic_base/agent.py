@@ -29,9 +29,14 @@ class Car(CellAgent):
         self.path = []
         self.path_index = 0
         self.recalculate_path_threshold = 5
+        self.failed_path_attempts = 0
+        self.max_failed_attempts = 3
         
         if self.destination is not None:
-            self.calculate_path_to_destination()
+            success = self.calculate_path_to_destination()
+            # If can't find path, try other destinations
+            if not success:
+                self._try_alternative_destinations()
     
     def is_active(self):
         """Check if car is active."""
@@ -111,6 +116,19 @@ class Car(CellAgent):
                 next_cell = self.model.grid[next_pos]
                 
                 if self._has_road(next_cell):
+                    # Check if this cell has a Destination that's NOT our destination
+                    has_other_destination = False
+                    for agent in next_cell.agents:
+                        if isinstance(agent, Destination):
+                            # Only block if it's NOT our destination
+                            if self.destination is None or agent != self.destination:
+                                has_other_destination = True
+                            break
+                    
+                    # Skip this cell if it has another car's destination
+                    if has_other_destination:
+                        continue
+                    
                     next_road = None
                     for agent in next_cell.agents:
                         if isinstance(agent, Road):
@@ -168,6 +186,7 @@ class Car(CellAgent):
                         heapq.heappush(open_set, (f_score[neighbor_pos], counter, neighbor_pos))
                         counter += 1
                         open_set_hash.add(neighbor_pos)
+        
         self.path = []
         return False
     
@@ -296,6 +315,25 @@ class Car(CellAgent):
                 return True
         return False
     
+    def _try_alternative_destinations(self):
+        """Try to find a path to any reachable destination."""
+        if not self.model.car_destinations:
+            self.transition_to_arrived()  # Remove if no destinations
+            return False
+        
+        # Shuffle destinations to try them in random order
+        destinations_to_try = list(self.model.car_destinations)
+        self.model.random.shuffle(destinations_to_try)
+        
+        for dest in destinations_to_try:
+            self.destination = dest
+            if self.calculate_path_to_destination():
+                return True
+        
+        # No reachable destination - remove this car
+        self.transition_to_arrived()
+        return False
+    
     def decide_action(self, perception):
         """Decide action based on state and perception."""
         if self._is_at_destination():
@@ -304,6 +342,7 @@ class Car(CellAgent):
         
         if self.is_arrived():
             return 'stop'
+        
         
         if (not self.path or self.path_index >= len(self.path) or 
             (self.waiting_time >= self.recalculate_path_threshold)):
@@ -358,13 +397,23 @@ class Car(CellAgent):
             self.steps_taken += 1
             self.advance_path_index()
             self.waiting_time = 0
+            self.failed_path_attempts = 0
             
         elif action == 'replan':
             success = self.calculate_path_to_destination()
             if not success:
-                self.transition_navigating_state(NavigatingState.BLOCKED)
+                self.failed_path_attempts += 1
+                # Try alternative destinations
+                if self.failed_path_attempts >= self.max_failed_attempts:
+                    # Remove car if it can't find any path after multiple attempts
+                    self.transition_to_arrived()
+                else:
+                    # Try a different destination
+                    if not self._try_alternative_destinations():
+                        self.transition_navigating_state(NavigatingState.BLOCKED)
             else:
                 self.waiting_time = 0
+                self.failed_path_attempts = 0
                 
         elif action == 'wait':
             pass

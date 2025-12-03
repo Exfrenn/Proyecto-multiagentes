@@ -35,7 +35,7 @@ let colorProgramInfo = undefined;
 let textureProgramInfo = undefined;
 let skyboxProgramInfo = undefined;
 let gl = undefined;
-const duration = 1500; // ms
+const duration = 200; // ms
 let elapsed = 0;
 let then = 0;
 
@@ -411,7 +411,7 @@ function setupObjects(scene, gl, programInfo) {
     const destinationTexture = twgl.createTexture(gl, {
         min: gl.NEAREST,
         mag: gl.NEAREST,
-        src: '../assets/textures/Road/destination.jpg'
+        src: '../assets/textures/Road/dest1.jpg'
     });
 
     // Create textured cube for roads
