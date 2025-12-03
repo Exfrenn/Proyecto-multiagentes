@@ -137,12 +137,8 @@ const bulbGeometry = {
     vao: null
 };
 
-// Store geometry for buildings
-const buildingGeometry = {
-    arrays: null,
-    bufferInfo: null,
-    vao: null
-};
+// Store geometry for buildings (multiple models for variety)
+const buildingGeometries = [];
 
 /**
  * Interpolate between two positions using smooth interpolation
@@ -279,16 +275,29 @@ async function main() {
     trafficLightGeometry.bufferInfo = poleObject.bufferInfo;
     trafficLightGeometry.vao = poleObject.vao;
 
-    // Load building model with its materials
-    const buildingArrays = await loadModel(
-        '../assets/models/building_1.obj',
-        '../assets/models/building_1.mtl'
-    );
-    const buildingModel = createBufferAndVAO(gl, colorProgramInfo, buildingArrays);
+    // Load multiple building models for variety
+    // Each building has its own scale to normalize sizes
+    const buildingFiles = [
+        { obj: '../assets/models/building_1.obj', mtl: '../assets/models/building_1.mtl', scale: 0.5 },
+        { obj: '../assets/models/building_2.obj', mtl: '../assets/models/building_2.mtl', scale: 0.5 },
+        // { obj: '../assets/models/building_04.obj', mtl: '../assets/models/building_04.mtl', scale: 0.3 },
+        // { obj: '../assets/models/house.obj', mtl: '../assets/models/house.mtl', scale: 0.4 },
+        { obj: '../assets/models/large_buildingE.obj', mtl: '../assets/models/large_buildingE.mtl', scale: 1 },
+        { obj: '../assets/models/skyscraperE.obj', mtl: '../assets/models/skyscraperE.mtl', scale: 1 },
+        { obj: '../assets/models/small_buildingB.obj', mtl: '../assets/models/small_buildingB.mtl', scale: 1.5 },
+    ];
 
-    buildingGeometry.arrays = buildingModel.arrays;
-    buildingGeometry.bufferInfo = buildingModel.bufferInfo;
-    buildingGeometry.vao = buildingModel.vao;
+    for (const building of buildingFiles) {
+        const buildingArrays = await loadModel(building.obj, building.mtl);
+        const buildingModel = createBufferAndVAO(gl, colorProgramInfo, buildingArrays);
+        buildingGeometries.push({
+            arrays: buildingModel.arrays,
+            bufferInfo: buildingModel.bufferInfo,
+            vao: buildingModel.vao,
+            scale: building.scale // Store the scale with the geometry
+        });
+        console.log(`Loaded building: ${building.obj}`);
+    }
 
     // Initialize the agents model
     await initAgentsModel();
@@ -409,21 +418,22 @@ function setupObjects(scene, gl, programInfo) {
         scene.addObject(agent);
     }
 
-    // OBSTACLES (buildings) - Varied solid colors
-    const buildingColors = [
-        [0.7, 0.6, 0.5, 1.0], // Beige
-        [0.6, 0.7, 0.7, 1.0], // Light blue-gray
-        [0.8, 0.7, 0.6, 1.0], // Light tan
-        [0.5, 0.6, 0.6, 1.0], // Dark blue-gray
-    ];
-
+    // OBSTACLES (buildings) - Use different building models for variety
     for (let i = 0; i < obstacles.length; i++) {
         const agent = obstacles[i];
-        agent.arrays = buildingGeometry.arrays;
-        agent.bufferInfo = buildingGeometry.bufferInfo;
-        agent.vao = buildingGeometry.vao;
-        agent.scale = { x: 0.5, y: 0.5, z: 0.5 };
-        agent.color = buildingColors[i % buildingColors.length];
+        
+        // Select a random building model based on position (deterministic randomness)
+        const buildingIndex = (agent.position.x + agent.position.z) % buildingGeometries.length;
+        const geometry = buildingGeometries[Math.floor(Math.abs(buildingIndex))];
+        
+        agent.arrays = geometry.arrays;
+        agent.bufferInfo = geometry.bufferInfo;
+        agent.vao = geometry.vao;
+        
+        // Use the specific scale for this building type
+        const s = geometry.scale || 0.5;
+        agent.scale = { x: s, y: s, z: s };
+        agent.color = [1.0, 1.0, 1.0, 1.0]; // White to show MTL colors
         scene.addObject(agent);
     }
 
@@ -864,10 +874,13 @@ async function drawScene() {
         }
     }
 
-    // Draw traffic light bulbs
+    // Draw traffic light bulbs - ensure we use the color program
+    gl.useProgram(colorProgramInfo.program);
+    twgl.setUniforms(colorProgramInfo, globalUniforms);
     drawTrafficLightBulbs(gl, colorProgramInfo, viewProjectionMatrix);
 
     // Draw car wheels
+    gl.useProgram(colorProgramInfo.program);
     drawCarWheels(gl, colorProgramInfo, viewProjectionMatrix, fract);
 
     // Update the scene after the elapsed duration
@@ -885,7 +898,7 @@ async function drawScene() {
 function drawTrafficLightBulbs(gl, programInfo, viewProjectionMatrix) {
     if (!bulbGeometry.vao) return;
 
-    const bulbScale = { x: 0.08, y: 0.08, z: 0.08 };
+    const bulbScale = { x: 0.12, y: 0.12, z: 0.12 }; // Larger bulbs for visibility
 
     for (const group of groupedTrafficLights) {
         // Check if any light in the group is green
