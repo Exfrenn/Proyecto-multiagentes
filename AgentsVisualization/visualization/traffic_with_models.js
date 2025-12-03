@@ -35,7 +35,7 @@ let colorProgramInfo = undefined;
 let textureProgramInfo = undefined;
 let skyboxProgramInfo = undefined;
 let gl = undefined;
-const duration = 1000; // ms
+const duration = 1500; // ms
 let elapsed = 0;
 let then = 0;
 
@@ -125,6 +125,33 @@ const buildingGeometry = {
     bufferInfo: null,
     vao: null
 };
+
+/**
+ * Interpolate between two positions using smooth interpolation
+ * Formula: P(t) = P₀ + t(P₁ - P₀) with SmoothStep easing
+ * @param {Object} prevPos - Previous position {x, y, z}
+ * @param {Object} currentPos - Current position {x, y, z}
+ * @param {number} t - Interpolation factor [0, 1]
+ * @returns {Array} Interpolated position [x, y, z]
+ */
+function interpolatePosition(prevPos, currentPos, t) {
+    if (!prevPos || !currentPos) {
+        return [
+            currentPos.x + 0.5,
+            currentPos.y,
+            currentPos.z + 0.5
+        ];
+    }
+
+    // SmoothStep for natural movement: t * t * (3 - 2 * t)
+    const tSmooth = t * t * (3 - 2 * t);
+
+    const x = prevPos.x + tSmooth * (currentPos.x - prevPos.x) + 0.5;
+    const y = prevPos.y + tSmooth * (currentPos.y - prevPos.y);
+    const z = prevPos.z + tSmooth * (currentPos.z - prevPos.z) + 0.5;
+
+    return [x, y, z];
+}
 
 // Main function is async to be able to make the requests
 async function main() {
@@ -329,7 +356,7 @@ function setupObjects(scene, gl, programInfo) {
         agent.vao = agentGeometry.vao;
         agent.scale = { x: 0.2, y: 0.2, z: 0.2 };
         agent.color = [1.0, 0.0, 1.0, 1.0]; // Magenta
-        agent.isDynamic = true; // Mark as dynamic for updates
+        agent.isDynamic = true;
         scene.addObject(agent);
     }
 
@@ -440,7 +467,6 @@ function setupObjects(scene, gl, programInfo) {
     }
 
     // DESTINATIONS - Green
-    const destinationCube = createColoredCube([0.0, 1.0, 0.0, 1.0]);
     for (const destination of destinations) {
         destination.arrays = roadCube.arrays;
         destination.bufferInfo = roadCube.bufferInfo;
@@ -507,10 +533,9 @@ function updateSceneAgents() {
             agent.vao = agentGeometry.vao;
 
             // Set appearance (matching setupObjects)
-            agent.scale = { x: 0.2, y: 0.2, z: 0.2 };
+            agent.scale = { x: 0.1, y: 0.1, z: 0.1 };
             agent.color = [1.0, 0.0, 1.0, 1.0]; // Magenta for cars
-            agent.isDynamic = true; // Mark as dynamic
-
+            agent.isDynamic = true;
             scene.addObject(agent);
         }
     }
@@ -561,7 +586,7 @@ function checkForNewPedestrians() {
 
             // Set appearance - smaller blue cubes for pedestrians
             ped.scale = { x: 0.15, y: 0.3, z: 0.15 };
-
+            ped.isDynamic = true;
             scene.addObject(ped);
         }
     }
@@ -569,13 +594,17 @@ function checkForNewPedestrians() {
 
 // Draw an object with its corresponding transformations
 function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
-    // Prepare the vector for translation and scale
-    // Add 0.5 offset to center objects in their grid cell
-    let v3_tra = [
-        object.posArray[0] + 0.5,
-        object.posArray[1],
-        object.posArray[2] + 0.5
-    ];
+    // Use interpolation for dynamic objects (cars, pedestrians)
+    let v3_tra;
+    if (object.isDynamic && object.prevPosition) {
+        v3_tra = interpolatePosition(object.prevPosition, object.position, fract);
+    } else {
+        v3_tra = [
+            object.posArray[0] + 0.5,
+            object.posArray[1],
+            object.posArray[2] + 0.5
+        ];
+    }
     let v3_sca = object.scaArray;
 
     // Create the individual transform matrices
