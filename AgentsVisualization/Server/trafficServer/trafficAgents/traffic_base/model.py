@@ -48,8 +48,8 @@ class CityModel(Model):
         self.car_spawn_positions = [
             (0, 0),
             (35, 0),
-            (0, 35),
-            (35, 35)
+            (0, 34),
+            (35, 34)
         ]
         self.pedestrian_spawn_positions = [
             (10, 15)
@@ -140,7 +140,7 @@ class CityModel(Model):
             active_cars_count = sum(1 for agent in self.agents if isinstance(agent, Car) and agent.is_active())
             active_pedestrians_count = sum(1 for agent in self.agents if isinstance(agent, Pedestrian) and agent.is_active())
             
-            # Spawn cars at ALL spawn positions simultaneously
+            
             for car_spawn_position in self.car_spawn_positions:
                 if active_cars_count >= self.max_cars:
                     break
