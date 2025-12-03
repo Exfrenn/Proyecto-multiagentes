@@ -105,12 +105,15 @@ const agentGeometry = {
     vao: null
 };
 
-// Store geometry for traffic lights
+// Store geometry for traffic light poles (simple cubes)
 const trafficLightGeometry = {
     arrays: null,
     bufferInfo: null,
     vao: null
 };
+
+// Grouped traffic lights (pairs share one pole)
+let groupedTrafficLights = [];
 
 // Store geometry for the bulb
 const bulbGeometry = {
@@ -193,22 +196,23 @@ async function main() {
     agentGeometry.bufferInfo = carModel.bufferInfo;
     agentGeometry.vao = carModel.vao;
 
-    // Load traffic light model
-    const stoplightArrays = await loadModel('../assets/models/stoplight_1.obj');
-
-    // Add color data to the stoplight model (gray/dark for now)
-    const numVerticesSL = stoplightArrays.a_position.data.length / 3;
-    const colorDataSL = [];
-    for (let i = 0; i < numVerticesSL; i++) {
-        colorDataSL.push(0.2, 0.2, 0.2, 1.0); // Dark Gray
+    // Create simple pole geometry for traffic lights (just a cube stretched)
+    const poleObject = new Object3D("pole_geom");
+    poleObject.prepareVAO(gl, colorProgramInfo);
+    
+    // Add dark gray color for the pole
+    const numVerticesPole = poleObject.arrays.a_position.data.length / 3;
+    const colorDataPole = [];
+    for (let i = 0; i < numVerticesPole; i++) {
+        colorDataPole.push(0.15, 0.15, 0.15, 1.0); // Dark gray
     }
-    stoplightArrays.a_color.data = colorDataSL;
-
-    const stoplightModel = createBufferAndVAO(gl, colorProgramInfo, stoplightArrays);
-
-    trafficLightGeometry.arrays = stoplightModel.arrays;
-    trafficLightGeometry.bufferInfo = stoplightModel.bufferInfo;
-    trafficLightGeometry.vao = stoplightModel.vao;
+    poleObject.arrays.a_color.data = colorDataPole;
+    poleObject.bufferInfo = twgl.createBufferInfoFromArrays(gl, poleObject.arrays);
+    poleObject.vao = twgl.createVAOFromBufferInfo(gl, colorProgramInfo, poleObject.bufferInfo);
+    
+    trafficLightGeometry.arrays = poleObject.arrays;
+    trafficLightGeometry.bufferInfo = poleObject.bufferInfo;
+    trafficLightGeometry.vao = poleObject.vao;
 
     // Load building model
     const buildingArrays = await loadModel('../assets/models/building_1.obj');
@@ -231,8 +235,8 @@ async function main() {
     await getTrafficLights();
     await getPedestrians();
 
-    // Assign orientations to traffic lights to create opposing pairs
-    assignTrafficLightOrientations();
+    // Group traffic lights into pairs (one pole per pair)
+    groupTrafficLights();
 
 
 
@@ -249,17 +253,21 @@ async function main() {
     drawScene();
 }
 
-// Assign orientations to traffic lights to create opposing pairs
-function assignTrafficLightOrientations() {
+// Group traffic lights into pairs - one pole per pair
+function groupTrafficLights() {
+    groupedTrafficLights = [];
     const processed = new Set();
 
     for (let i = 0; i < trafficLights.length; i++) {
         if (processed.has(i)) continue;
 
         const tl = trafficLights[i];
-        let foundPair = false;
+        let group = {
+            position: { x: tl.position.x, y: tl.position.y, z: tl.position.z },
+            lights: [tl]
+        };
 
-        // Look for nearby traffic light to form a pair
+        // Look for adjacent traffic light to form a pair
         for (let j = i + 1; j < trafficLights.length; j++) {
             if (processed.has(j)) continue;
 
@@ -267,40 +275,22 @@ function assignTrafficLightOrientations() {
             const dx = Math.abs(tl.position.x - other.position.x);
             const dz = Math.abs(tl.position.z - other.position.z);
 
-            // If close and aligned on same axis, they're a pair
-            if ((dx <= 3 && dz === 0) || (dz <= 3 && dx === 0)) {
-                if (dx > dz) {
-                    // Horizontal pair
-                    if (tl.position.x < other.position.x) {
-                        tl.orientation = "Right";
-                        other.orientation = "Left";
-                    } else {
-                        tl.orientation = "Left";
-                        other.orientation = "Right";
-                    }
-                } else {
-                    // Vertical pair
-                    if (tl.position.z < other.position.z) {
-                        tl.orientation = "Up";
-                        other.orientation = "Down";
-                    } else {
-                        tl.orientation = "Down";
-                        other.orientation = "Up";
-                    }
-                }
-                processed.add(i);
+            // If adjacent (within 1 cell), group them
+            if ((dx <= 1 && dz === 0) || (dz <= 1 && dx === 0)) {
+                // Position the pole between both lights
+                group.position.x = (tl.position.x + other.position.x) / 2;
+                group.position.z = (tl.position.z + other.position.z) / 2;
+                group.lights.push(other);
                 processed.add(j);
-                foundPair = true;
                 break;
             }
         }
 
-        // Default if no pair found
-        if (!foundPair) {
-            tl.orientation = "Left";
-            processed.add(i);
-        }
+        processed.add(i);
+        groupedTrafficLights.push(group);
     }
+    
+    console.log(`Grouped ${trafficLights.length} traffic lights into ${groupedTrafficLights.length} poles`);
 }
 
 function setupScene() {
@@ -480,14 +470,20 @@ function setupObjects(scene, gl, programInfo) {
     }
 
 
-    // TRAFFIC LIGHTS - 3D Model
-    for (const trafficLight of trafficLights) {
-        trafficLight.arrays = trafficLightGeometry.arrays;
-        trafficLight.bufferInfo = trafficLightGeometry.bufferInfo;
-        trafficLight.vao = trafficLightGeometry.vao;
-        trafficLight.scale = { x: 0.5, y: 0.5, z: 0.5 };
-        // trafficLight.color is already set in the model loader or defaults
-        scene.addObject(trafficLight);
+    // TRAFFIC LIGHTS - Simple poles for grouped lights
+    for (let i = 0; i < groupedTrafficLights.length; i++) {
+        const group = groupedTrafficLights[i];
+        const pole = new Object3D(`traffic_pole_${i}`, [
+            group.position.x + 0.9,
+            group.position.y,
+            group.position.z + 0.9
+        ]);
+        pole.arrays = trafficLightGeometry.arrays;
+        pole.bufferInfo = trafficLightGeometry.bufferInfo;
+        pole.vao = trafficLightGeometry.vao;
+        pole.scale = { x: 0.04, y: 0.8, z: 0.04 }; // Thinner, shorter pole
+        pole.color = [0.15, 0.15, 0.15, 1.0];
+        scene.addObject(pole);
     }
 
     // PEDESTRIANS - Blue cubes
@@ -702,19 +698,23 @@ async function drawScene() {
     lightColors.push(...light.diffuse); // Use diffuse as main color
     numLights++;
 
-    // 2. Traffic Lights
-    for (const tl of trafficLights) {
+    // 2. Traffic Lights (grouped)
+    for (const group of groupedTrafficLights) {
         if (numLights >= MAX_LIGHTS) break;
-        const isGreen = (tl.state === true || tl.state === "Green" || tl.state === "green");
+        // Check if any light in the group is green
+        const isGreen = group.lights.some(tl => 
+            tl.state === true || tl.state === "Green" || tl.state === "green"
+        );
+
+        const lightX = group.position.x + 0.9;
+        const lightZ = group.position.z + 0.9;
 
         if (isGreen) {
-            // Green Bulb Position (Lower)
-            lightPositions.push(tl.position.x, tl.position.y + 2.2, tl.position.z);
-            lightColors.push(0.0, 0.5, 0.0, 1.0); // Green (Reduced intensity)
+            lightPositions.push(lightX, group.position.y + 0.75, lightZ);
+            lightColors.push(0.0, 0.5, 0.0, 1.0);
         } else {
-            // Red Bulb Position (Higher)
-            lightPositions.push(tl.position.x, tl.position.y + 2.6, tl.position.z);
-            lightColors.push(0.5, 0.0, 0.0, 1.0); // Red (Reduced intensity)
+            lightPositions.push(lightX, group.position.y + 0.9, lightZ);
+            lightColors.push(0.5, 0.0, 0.0, 1.0);
         }
         numLights++;
     }
@@ -770,49 +770,42 @@ async function drawScene() {
     requestAnimationFrame(drawScene);
 }
 
-// Helper to draw traffic light bulbs
+// Helper to draw traffic light bulbs (one pair per grouped pole)
 function drawTrafficLightBulbs(gl, programInfo, viewProjectionMatrix) {
     if (!bulbGeometry.vao) return;
 
-    const bulbScale = { x: 0.15, y: 0.15, z: 0.15 };
+    const bulbScale = { x: 0.08, y: 0.08, z: 0.08 };
 
-    for (const tl of trafficLights) {
-        const isGreen = (tl.state === true || tl.state === "Green" || tl.state === "green");
+    for (const group of groupedTrafficLights) {
+        // Check if any light in the group is green
+        const isGreen = group.lights.some(tl => 
+            tl.state === true || tl.state === "Green" || tl.state === "green"
+        );
 
-        // --- Draw Red Bulb ---
-        const redColor = [1.0, 0.0, 0.0, 1.0];
-        const redEmissive = isGreen ? [0.1, 0.0, 0.0, 1.0] : [1.0, 0.0, 0.0, 1.0]; // Dim if inactive, Bright if active
+        const baseX = group.position.x + 0.9;
+        const baseY = group.position.y;
+        const baseZ = group.position.z + 0.9;
 
-        const redBulb = new Object3D("bulb_red", [
-            tl.position.x,
-            tl.position.y + 2.6, // Higher position
-            tl.position.z
-        ]);
+        // --- Red Bulb (top) ---
+        const redEmissive = isGreen ? [0.15, 0.0, 0.0, 1.0] : [1.0, 0.0, 0.0, 1.0];
+        const redBulb = new Object3D("bulb_red", [baseX, baseY + 0.9, baseZ]);
         redBulb.scale = bulbScale;
-        redBulb.color = redColor;
+        redBulb.color = [1.0, 0.0, 0.0, 1.0];
         redBulb.emissive = redEmissive;
         redBulb.arrays = bulbGeometry.arrays;
         redBulb.bufferInfo = bulbGeometry.bufferInfo;
         redBulb.vao = bulbGeometry.vao;
-
         drawObject(gl, programInfo, redBulb, viewProjectionMatrix, 0);
 
-        // --- Draw Green Bulb ---
-        const greenColor = [0.0, 1.0, 0.0, 1.0];
-        const greenEmissive = isGreen ? [0.0, 1.0, 0.0, 1.0] : [0.0, 0.1, 0.0, 1.0]; // Bright if active, Dim if inactive
-
-        const greenBulb = new Object3D("bulb_green", [
-            tl.position.x,
-            tl.position.y + 2.2, // Lower position
-            tl.position.z
-        ]);
+        // --- Green Bulb (bottom) ---
+        const greenEmissive = isGreen ? [0.0, 1.0, 0.0, 1.0] : [0.0, 0.15, 0.0, 1.0];
+        const greenBulb = new Object3D("bulb_green", [baseX, baseY + 0.75, baseZ]);
         greenBulb.scale = bulbScale;
-        greenBulb.color = greenColor;
+        greenBulb.color = [0.0, 1.0, 0.0, 1.0];
         greenBulb.emissive = greenEmissive;
         greenBulb.arrays = bulbGeometry.arrays;
         greenBulb.bufferInfo = bulbGeometry.bufferInfo;
         greenBulb.vao = bulbGeometry.vao;
-
         drawObject(gl, programInfo, greenBulb, viewProjectionMatrix, 0);
     }
 }
