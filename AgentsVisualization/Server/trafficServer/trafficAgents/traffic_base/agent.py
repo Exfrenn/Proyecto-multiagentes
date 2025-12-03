@@ -116,6 +116,19 @@ class Car(CellAgent):
                 next_cell = self.model.grid[next_pos]
                 
                 if self._has_road(next_cell):
+                    # Check if this cell has a Destination that's NOT our destination
+                    has_other_destination = False
+                    for agent in next_cell.agents:
+                        if isinstance(agent, Destination):
+                            # Only block if it's NOT our destination
+                            if self.destination is None or agent != self.destination:
+                                has_other_destination = True
+                            break
+                    
+                    # Skip this cell if it has another car's destination
+                    if has_other_destination:
+                        continue
+                    
                     next_road = None
                     for agent in next_cell.agents:
                         if isinstance(agent, Road):
@@ -174,8 +187,6 @@ class Car(CellAgent):
                         counter += 1
                         open_set_hash.add(neighbor_pos)
         
-        # Debug: No path found
-        print(f"CAR at {start_pos}: NO PATH to {goal_pos} (explored {len(g_score)} cells)")
         self.path = []
         return False
     
@@ -331,6 +342,7 @@ class Car(CellAgent):
         
         if self.is_arrived():
             return 'stop'
+        
         
         if (not self.path or self.path_index >= len(self.path) or 
             (self.waiting_time >= self.recalculate_path_threshold)):
