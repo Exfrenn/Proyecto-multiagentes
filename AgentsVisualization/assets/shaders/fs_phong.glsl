@@ -4,6 +4,7 @@ precision highp float;
 in vec3 v_normal;
 in vec3 v_surfaceWorldPosition;
 in vec3 v_surfaceToView;
+in vec4 v_color;
 
 // Scene uniforms
 uniform vec4 u_ambientLight;
@@ -55,12 +56,14 @@ void main() {
         }
     }
 
-    // Combine
-    vec4 ambient = u_ambientColor * u_ambientLight;
-    vec4 diffuse = vec4(totalDiffuse, 1.0) * u_diffuseColor;
+    // Combine - use vertex color (v_color) for the base color
+    // Multiply by uniform colors to allow tinting
+    vec4 baseColor = v_color * u_diffuseColor;
+    vec4 ambient = v_color * u_ambientColor * u_ambientLight;
+    vec4 diffuse = vec4(totalDiffuse, 1.0) * baseColor;
     vec4 specular = vec4(totalSpecular, 1.0) * u_specularColor;
     vec4 emissive = u_emissive;
 
     outColor = ambient + diffuse + specular + emissive;
-    outColor.a = u_diffuseColor.a; // Keep original alpha
+    outColor.a = baseColor.a; // Keep original alpha
 }

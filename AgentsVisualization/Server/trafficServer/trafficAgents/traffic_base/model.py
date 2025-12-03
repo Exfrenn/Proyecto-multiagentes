@@ -48,8 +48,8 @@ class CityModel(Model):
         self.car_spawn_positions = [
             (0, 0),
             (35, 0),
-            (0, 35),
-            (35, 35)
+            (0, 34),
+            (35, 34)
         ]
         self.pedestrian_spawn_positions = [
             (10, 15)

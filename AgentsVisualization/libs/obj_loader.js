@@ -110,8 +110,12 @@ function loadObj(objString) {
                 parseFace(parts, objData, arrays);
                 break;
             case 'usemtl':
+                console.log(`Found usemtl: ${parts[1]}, materials available:`, Object.keys(materials));
                 if (materials.hasOwnProperty(parts[1])) {
                     materialInUse = materials[parts[1]];
+                    console.log(`Using material: ${parts[1]} with Kd:`, materialInUse['Kd']);
+                } else {
+                    console.warn(`Material not found: ${parts[1]}`);
                 }
                 break;
         }
@@ -131,7 +135,12 @@ function loadObj(objString) {
  * Return an object containing all the materials described inside,
  * with their illumination attributes.
  */
-function loadMtl(mtlString) {
+function loadMtl(mtlString, clearPrevious = true) {
+    // Clear previous materials to avoid conflicts between models
+    if (clearPrevious) {
+        materials = {};
+        materialInUse = undefined;
+    }
 
     let currentMtl = {};
 

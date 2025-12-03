@@ -184,16 +184,14 @@ async function main() {
     bulbGeometry.bufferInfo = bulbObject.bufferInfo;
     bulbGeometry.vao = bulbObject.vao;
 
-    // Load car model
-    const carArrays = await loadModel('../assets/models/car-2024-301.obj');
+    // Load car model with its materials
+    const carArrays = await loadModel(
+        '../assets/models/car-2024-301.obj',
+        '../assets/models/car-2024-301.mtl'
+    );
 
-    // Add color data to the model (magenta for cars)
-    const numVertices = carArrays.a_position.data.length / 3;
-    const colorData = [];
-    for (let i = 0; i < numVertices; i++) {
-        colorData.push(1.0, 0.0, 1.0, 1.0); // RGBA - Magenta
-    }
-    carArrays.a_color.data = colorData;
+    // Log to see if colors were loaded from MTL
+    console.log("Car colors loaded (first 20 values):", carArrays.a_color.data.slice(0, 20));
 
     const carModel = createBufferAndVAO(gl, colorProgramInfo, carArrays);
 
@@ -239,8 +237,11 @@ async function main() {
     trafficLightGeometry.bufferInfo = poleObject.bufferInfo;
     trafficLightGeometry.vao = poleObject.vao;
 
-    // Load building model
-    const buildingArrays = await loadModel('../assets/models/building_1.obj');
+    // Load building model with its materials
+    const buildingArrays = await loadModel(
+        '../assets/models/building_1.obj',
+        '../assets/models/building_1.mtl'
+    );
     const buildingModel = createBufferAndVAO(gl, colorProgramInfo, buildingArrays);
 
     buildingGeometry.arrays = buildingModel.arrays;
@@ -355,13 +356,13 @@ function setupObjects(scene, gl, programInfo) {
     const baseCube = new Object3D(-1);
     baseCube.prepareVAO(gl, programInfo);
 
-    // AGENTS (cars) - Magenta
+    // AGENTS (cars) - Use colors from MTL file
     for (const agent of agents) {
         agent.arrays = agentGeometry.arrays;
         agent.bufferInfo = agentGeometry.bufferInfo;
         agent.vao = agentGeometry.vao;
         agent.scale = { x: 0.2, y: 0.2, z: 0.2 };
-        agent.color = [1.0, 0.0, 1.0, 1.0]; // Magenta
+        agent.color = [1.0, 1.0, 1.0, 1.0]; // White - let vertex colors from MTL show through
         agent.isDynamic = true;
         scene.addObject(agent);
     }
@@ -1021,20 +1022,34 @@ function setupUI() {
     simFolder.open();
 }
 
-//Load a .obj model from a file path
-async function loadModel(path) {
-    console.log(`Loading model: ${path}`);
+//Load a .obj model from a file path, optionally loading MTL first
+async function loadModel(objPath, mtlPath = null) {
+    console.log(`Loading model: ${objPath}`);
     try {
-        const response = await fetch(path);
+        // If MTL path provided, load materials first
+        if (mtlPath) {
+            console.log(`Loading materials: ${mtlPath}`);
+            const mtlResponse = await fetch(mtlPath);
+            if (mtlResponse.ok) {
+                const mtlText = await mtlResponse.text();
+                loadMtl(mtlText);
+                console.log(`Loaded materials from ${mtlPath}`);
+            } else {
+                console.warn(`Could not load MTL: ${mtlPath}`);
+            }
+        }
+        
+        // Now load the OBJ
+        const response = await fetch(objPath);
         if (!response.ok) {
-            throw new Error(`Failed to load ${path}: ${response.statusText}`);
+            throw new Error(`Failed to load ${objPath}: ${response.statusText}`);
         }
         const objText = await response.text();
         const arrays = loadObj(objText);
-        console.log(`Loaded ${path}`);
+        console.log(`Loaded ${objPath}`);
         return arrays;
     } catch (error) {
-        console.error(`Error loading ${path}:`, error);
+        console.error(`Error loading ${objPath}:`, error);
         throw error;
     }
 }
