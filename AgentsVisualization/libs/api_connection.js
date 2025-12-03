@@ -53,7 +53,7 @@ async function initAgentsModel() {
             seed: simulationSettings.seed,
             spawnInterval: simulationSettings.spawnInterval
         };
-        
+
         // Send a POST request to the agent server to initialize the model
         let response = await fetch(agent_server_uri + "init", {
             method: 'POST',
@@ -131,7 +131,7 @@ async function setPedestriansEnabled(enabled) {
 async function resetSimulation(seed = null) {
     try {
         const resetSeed = seed !== null ? seed : simulationSettings.seed;
-        
+
         let response = await fetch(agent_server_uri + "reset", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -146,7 +146,7 @@ async function resetSimulation(seed = null) {
             let result = await response.json();
             console.log(result.message);
             simulationSettings.seed = resetSeed;
-            
+
             // Clear local arrays
             agents.length = 0;
             pedestrians.length = 0;
@@ -156,7 +156,7 @@ async function resetSimulation(seed = null) {
             destinations.length = 0;
             sidewalks.length = 0;
             pedestrianWalks.length = 0;
-            
+
             return true;
         } else {
             let result = await response.json();
@@ -182,15 +182,11 @@ async function getAgents() {
             // Parse the response as JSON
             let result = await response.json();
 
-            // Check if the agents array is empty
             if (agents.length == 0) {
-                // Create new agents and add them to the agents array
                 for (const agent of result.agentpos) {
                     const newAgent = new Object3D(agent.id, [agent.x, agent.y, agent.z]);
-                    // Store the initial position
-                    newAgent['oldPosArray'] = newAgent.posArray;
-                    // Store orientation
-                    newAgent['orientation'] = agent.orientation || "Up";
+                    newAgent.prevPosition = { x: agent.x, y: agent.y, z: agent.z };
+                    newAgent.orientation = agent.orientation || "Up";
                     agents.push(newAgent);
                 }
             } else {
@@ -209,20 +205,17 @@ async function getAgents() {
                 for (const agent of result.agentpos) {
                     const current_agent = agents.find((object3d) => object3d.id == agent.id);
 
-                    // Check if the agent exists in the agents array
                     if (current_agent != undefined) {
-                        // Update the agent's position
-                        current_agent.oldPosArray = current_agent.posArray;
+                        // Save previous position for smooth interpolation
+                        if (current_agent.position) {
+                            current_agent.prevPosition = { ...current_agent.position };
+                        }
                         current_agent.position = { x: agent.x, y: agent.y, z: agent.z };
-                        // Update orientation
                         current_agent.orientation = agent.orientation || "Up";
                     } else {
-                        // NEW AGENT: Create and add to the array
-                        // console.log(`🆕 New agent detected: ${agent.id}`);
                         const newAgent = new Object3D(agent.id, [agent.x, agent.y, agent.z]);
-                        newAgent['oldPosArray'] = newAgent.posArray;
-                        // Store orientation
-                        newAgent['orientation'] = agent.orientation || "Up";
+                        newAgent.prevPosition = { x: agent.x, y: agent.y, z: agent.z };
+                        newAgent.orientation = agent.orientation || "Up";
                         agents.push(newAgent);
                     }
                 }
@@ -380,10 +373,9 @@ async function getPedestrians() {
             const pedList = result.Pedestrianpos;
 
             if (pedestrians.length === 0) {
-                // First time → create Object3D for all pedestrians
                 for (const ped of pedList) {
                     const newPed = new Object3D(ped.id, [ped.x, ped.y, ped.z]);
-                    newPed.oldPosArray = newPed.posArray;
+                    newPed.prevPosition = { x: ped.x, y: ped.y, z: ped.z };
                     pedestrians.push(newPed);
                 }
             } else {
@@ -392,13 +384,14 @@ async function getPedestrians() {
                     let currentPed = pedestrians.find((p) => p.id == ped.id);
 
                     if (currentPed) {
-                        // Update existing pedestrian
-                        currentPed.oldPosArray = currentPed.posArray;
+                        // Save previous position for smooth interpolation
+                        if (currentPed.position) {
+                            currentPed.prevPosition = { ...currentPed.position };
+                        }
                         currentPed.position = { x: ped.x, y: ped.y, z: ped.z };
                     } else {
-                        // Add new pedestrian dynamically
                         const newPed = new Object3D(ped.id, [ped.x, ped.y, ped.z]);
-                        newPed.oldPosArray = newPed.posArray;
+                        newPed.prevPosition = { x: ped.x, y: ped.y, z: ped.z };
                         pedestrians.push(newPed);
                     }
                 }
@@ -443,9 +436,9 @@ async function update() {
     }
 }
 
-export { 
+export {
     agents, pedestrians, obstacles, trafficLights, roads, destinations, sidewalks, pedestrianWalks,
-    initAgentsModel, update, getAgents, getObstacles, getTrafficLights, getRoads, getDestinations, 
+    initAgentsModel, update, getAgents, getObstacles, getTrafficLights, getRoads, getDestinations,
     getSidewalks, getPedestrianWalks, getPedestrians,
     setSpawnInterval, setPedestriansEnabled, resetSimulation, simulationSettings
 };
