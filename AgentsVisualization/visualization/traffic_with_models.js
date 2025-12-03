@@ -98,8 +98,15 @@ const pedestrianGeometry = {
     vao: null
 };
 
-// Store geometry for dynamic agents
+// Store geometry for dynamic agents (car body)
 const agentGeometry = {
+    arrays: null,
+    bufferInfo: null,
+    vao: null
+};
+
+// Store geometry for car wheels
+const wheelGeometry = {
     arrays: null,
     bufferInfo: null,
     vao: null
@@ -165,7 +172,6 @@ async function main() {
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
     // Prepare the program with the shaders
-    // Prepare the program with the shaders
     colorProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
     colorProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
     textureProgramInfo = twgl.createProgramInfo(gl, [vsTextureGLSL, fsTextureGLSL]);
@@ -195,6 +201,25 @@ async function main() {
     agentGeometry.arrays = carModel.arrays;
     agentGeometry.bufferInfo = carModel.bufferInfo;
     agentGeometry.vao = carModel.vao;
+
+    // Load wheel model
+    const wheelArrays = await loadModel('../assets/models/wheel.obj');
+    console.log("Wheel model loaded:", wheelArrays);
+    console.log("Wheel vertices:", wheelArrays.a_position.data.length / 3);
+    
+    // Add dark color for wheels
+    const numVerticesWheel = wheelArrays.a_position.data.length / 3;
+    const colorDataWheel = [];
+    for (let i = 0; i < numVerticesWheel; i++) {
+        colorDataWheel.push(0.2, 0.2, 0.2, 1.0); // Dark gray
+    }
+    wheelArrays.a_color = { numComponents: 4, data: colorDataWheel };
+    
+    const wheelModel = createBufferAndVAO(gl, colorProgramInfo, wheelArrays);
+    wheelGeometry.arrays = wheelModel.arrays;
+    wheelGeometry.bufferInfo = wheelModel.bufferInfo;
+    wheelGeometry.vao = wheelModel.vao;
+    console.log("Wheel VAO created:", wheelGeometry.vao);
 
     // Create simple pole geometry for traffic lights (just a cube stretched)
     const poleObject = new Object3D("pole_geom");
@@ -759,6 +784,9 @@ async function drawScene() {
     // Draw traffic light bulbs
     drawTrafficLightBulbs(gl, colorProgramInfo, viewProjectionMatrix);
 
+    // Draw car wheels
+    drawCarWheels(gl, colorProgramInfo, viewProjectionMatrix, fract);
+
     // Update the scene after the elapsed duration
     if (elapsed >= duration) {
         elapsed = 0;
@@ -807,6 +835,94 @@ function drawTrafficLightBulbs(gl, programInfo, viewProjectionMatrix) {
         greenBulb.bufferInfo = bulbGeometry.bufferInfo;
         greenBulb.vao = bulbGeometry.vao;
         drawObject(gl, programInfo, greenBulb, viewProjectionMatrix, 0);
+    }
+}
+
+// Helper to draw car wheels
+// Helper to draw car wheels
+function drawCarWheels(gl, programInfo, viewProjectionMatrix, fract) {
+    if (!wheelGeometry.vao) {
+        return;
+    }
+
+    const wheelScale = [0.08, 0.08, 0.08]; // Escala de las ruedas
+
+    // Use scene.objects and identify cars by their vao (same as agentGeometry)
+    for (const obj of scene.objects) {
+        // Only draw wheels for cars (objects using agentGeometry VAO)
+        if (!obj.isDynamic || !obj.position) continue;
+        if (obj.vao !== agentGeometry.vao) continue;
+
+        // Get car rotation
+        const carRotY = getRotationFromOrientation(obj.orientation);
+
+        // Interpolate car position
+        let carPos;
+        if (obj.prevPosition) {
+            carPos = interpolatePosition(obj.prevPosition, obj.position, fract);
+        } else {
+            carPos = [obj.position.x + 0.5, obj.position.y, obj.position.z + 0.5];
+        }
+
+        // Wheel offsets in car's local space (car faces +X when rotation=0)
+        const offsets = [
+            { lx:  0.28, ly: 0.08, lz: -0.22 },  // Front left
+            { lx:  0.28, ly: 0.08, lz:  0.22 },  // Front right
+            { lx: -0.25, ly: 0.08, lz: -0.22 },  // Back left
+            { lx: -0.25, ly: 0.08, lz:  0.22 },  // Back right
+        ];
+
+        for (const off of offsets) {
+            // Build transformation matrix manually
+            // We want: Scale → RotZ (turn rim outward) → RotX (lay flat) → RotY (car orientation) → Translate
+            
+            // 1. Scale the wheel
+            let mat = M4.scale(wheelScale);
+            
+            // 2. Rotate around Z 90° to turn the rim outward
+            mat = M4.multiply(M4.rotationZ(Math.PI / 2), mat);
+            
+            // 3. Rotate around X to lay the cylinder on its side
+            mat = M4.multiply(M4.rotationX(Math.PI / 2), mat);
+            
+            // 4. Rotate with car orientation around Y
+            mat = M4.multiply(M4.rotationY(carRotY), mat);
+            
+            // 5. Calculate world offset position
+            const cosR = Math.cos(carRotY);
+            const sinR = Math.sin(carRotY);
+            const worldOffX = off.lx * cosR - off.lz * sinR;
+            const worldOffZ = off.lx * sinR + off.lz * cosR;
+            
+            // 6. Translate to world position
+            const worldPos = [
+                carPos[0] + worldOffX,
+                carPos[1] + off.ly,
+                carPos[2] + worldOffZ
+            ];
+            mat = M4.multiply(M4.translation(worldPos), mat);
+
+            // Calculate matrices for shader
+            const wvpMat = M4.multiply(viewProjectionMatrix, mat);
+            const normalMat = M4.transpose(M4.inverse(mat));
+
+            // Set uniforms
+            const wheelUniforms = {
+                u_world: mat,
+                u_worldInverseTransform: normalMat,
+                u_worldViewProjection: wvpMat,
+                u_ambientColor: [0.15, 0.15, 0.15, 1.0],
+                u_diffuseColor: [0.2, 0.2, 0.2, 1.0],
+                u_specularColor: [0.3, 0.3, 0.3, 1.0],
+                u_shininess: 30.0,
+                u_emissive: [0, 0, 0, 0]
+            };
+
+            gl.useProgram(programInfo.program);
+            twgl.setUniforms(programInfo, wheelUniforms);
+            gl.bindVertexArray(wheelGeometry.vao);
+            twgl.drawBufferInfo(gl, wheelGeometry.bufferInfo);
+        }
     }
 }
 
