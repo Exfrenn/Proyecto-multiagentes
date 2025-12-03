@@ -47,17 +47,17 @@ class CityModel(Model):
         self.spawn_timer = 0
         self.car_spawn_positions = [
             (0, 0),
-            (28, 0),
-            (0, 28),
-            (28, 28)
+            (35, 0),
+            (0, 35),
+            (35, 35)
         ]
         self.pedestrian_spawn_positions = [
             (10, 15)
         ]
-        self.max_cars = 10
+        self.max_cars = 1000
         self.max_pedestrians = 5
 
-        map_file_path = os.path.join(city_files_dir, "2024_modified.txt")
+        map_file_path = os.path.join(city_files_dir, "2025_base.txt")
         with open(map_file_path) as map_file:
             map_lines = map_file.readlines()
             self.width = len(map_lines[0])
@@ -140,8 +140,11 @@ class CityModel(Model):
             active_cars_count = sum(1 for agent in self.agents if isinstance(agent, Car) and agent.is_active())
             active_pedestrians_count = sum(1 for agent in self.agents if isinstance(agent, Pedestrian) and agent.is_active())
             
-            if active_cars_count < self.max_cars:
-                car_spawn_position = self.random.choice(self.car_spawn_positions)
+            # Spawn cars at ALL spawn positions simultaneously
+            for car_spawn_position in self.car_spawn_positions:
+                if active_cars_count >= self.max_cars:
+                    break
+                    
                 car_spawn_cell = self.grid[car_spawn_position]
                 
                 cars_at_spawn_location = [agent for agent in car_spawn_cell.agents if isinstance(agent, Car)]
@@ -150,9 +153,10 @@ class CityModel(Model):
                     if self.car_destinations:
                         selected_destination = self.random.choice(self.car_destinations)
                         Car(self, car_spawn_cell, destination=selected_destination)
-                
+                        active_cars_count += 1
                     else:
                         Car(self, car_spawn_cell, destination=None)
+                        active_cars_count += 1
                         
             
             if self.pedestrians_enabled and active_pedestrians_count < self.max_pedestrians:
