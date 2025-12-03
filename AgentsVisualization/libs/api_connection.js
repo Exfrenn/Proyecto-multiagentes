@@ -376,9 +376,21 @@ async function getPedestrians() {
                 for (const ped of pedList) {
                     const newPed = new Object3D(ped.id, [ped.x, ped.y, ped.z]);
                     newPed.prevPosition = { x: ped.x, y: ped.y, z: ped.z };
+                    newPed.orientation = ped.orientation || "Up";
                     pedestrians.push(newPed);
                 }
             } else {
+                // Create a set of IDs from the server response for quick lookup
+                const serverPedestrianIds = new Set(pedList.map(p => p.id));
+
+                // Remove pedestrians that are no longer in the server response
+                for (let i = pedestrians.length - 1; i >= 0; i--) {
+                    if (!serverPedestrianIds.has(pedestrians[i].id)) {
+                        console.log(`🗑️ Removing pedestrian: ${pedestrians[i].id}`);
+                        pedestrians.splice(i, 1);
+                    }
+                }
+
                 // Update positions or add new pedestrian
                 for (const ped of pedList) {
                     let currentPed = pedestrians.find((p) => p.id == ped.id);
@@ -389,9 +401,11 @@ async function getPedestrians() {
                             currentPed.prevPosition = { ...currentPed.position };
                         }
                         currentPed.position = { x: ped.x, y: ped.y, z: ped.z };
+                        currentPed.orientation = ped.orientation || "Up";
                     } else {
                         const newPed = new Object3D(ped.id, [ped.x, ped.y, ped.z]);
                         newPed.prevPosition = { x: ped.x, y: ped.y, z: ped.z };
+                        newPed.orientation = ped.orientation || "Up";
                         pedestrians.push(newPed);
                     }
                 }

@@ -91,11 +91,18 @@ const settings = {
     }
 };
 
-// Store geometry for pedestrians
+// Store geometry for pedestrians (3D models - alternating for animation)
 const pedestrianGeometry = {
-    arrays: null,
-    bufferInfo: null,
-    vao: null
+    model1: {
+        arrays: null,
+        bufferInfo: null,
+        vao: null
+    },
+    model2: {
+        arrays: null,
+        bufferInfo: null,
+        vao: null
+    }
 };
 
 // Store geometry for dynamic agents (car body)
@@ -206,7 +213,7 @@ async function main() {
     const wheelArrays = await loadModel('../assets/models/wheel.obj');
     console.log("Wheel model loaded:", wheelArrays);
     console.log("Wheel vertices:", wheelArrays.a_position.data.length / 3);
-    
+
     // Add dark color for wheels
     const numVerticesWheel = wheelArrays.a_position.data.length / 3;
     const colorDataWheel = [];
@@ -214,17 +221,55 @@ async function main() {
         colorDataWheel.push(0.2, 0.2, 0.2, 1.0); // Dark gray
     }
     wheelArrays.a_color = { numComponents: 4, data: colorDataWheel };
-    
+
     const wheelModel = createBufferAndVAO(gl, colorProgramInfo, wheelArrays);
     wheelGeometry.arrays = wheelModel.arrays;
     wheelGeometry.bufferInfo = wheelModel.bufferInfo;
     wheelGeometry.vao = wheelModel.vao;
     console.log("Wheel VAO created:", wheelGeometry.vao);
 
+    // Load pedestrian model 1 (persona1)
+    const person1Arrays = await loadModel('../assets/models/AddedModels/persona1.obj');
+    console.log("Person model 1 loaded:", person1Arrays);
+    console.log("Person 1 vertices:", person1Arrays.a_position.data.length / 3);
+
+    // Add blue color for pedestrians
+    const numVerticesPerson1 = person1Arrays.a_position.data.length / 3;
+    const colorDataPerson1 = [];
+    for (let i = 0; i < numVerticesPerson1; i++) {
+        colorDataPerson1.push(0.2, 0.4, 1.0, 1.0); // Blue
+    }
+    person1Arrays.a_color = { numComponents: 4, data: colorDataPerson1 };
+
+    const person1Model = createBufferAndVAO(gl, colorProgramInfo, person1Arrays);
+    pedestrianGeometry.model1.arrays = person1Model.arrays;
+    pedestrianGeometry.model1.bufferInfo = person1Model.bufferInfo;
+    pedestrianGeometry.model1.vao = person1Model.vao;
+    console.log("Person 1 VAO created:", pedestrianGeometry.model1.vao);
+
+    // Load pedestrian model 2 (persona2)
+    const person2Arrays = await loadModel('../assets/models/AddedModels/persona2.obj');
+    console.log("Person model 2 loaded:", person2Arrays);
+    console.log("Person 2 vertices:", person2Arrays.a_position.data.length / 3);
+
+    // Add blue color for second pedestrian model
+    const numVerticesPerson2 = person2Arrays.a_position.data.length / 3;
+    const colorDataPerson2 = [];
+    for (let i = 0; i < numVerticesPerson2; i++) {
+        colorDataPerson2.push(0.2, 0.4, 1.0, 1.0); // Blue
+    }
+    person2Arrays.a_color = { numComponents: 4, data: colorDataPerson2 };
+
+    const person2Model = createBufferAndVAO(gl, colorProgramInfo, person2Arrays);
+    pedestrianGeometry.model2.arrays = person2Model.arrays;
+    pedestrianGeometry.model2.bufferInfo = person2Model.bufferInfo;
+    pedestrianGeometry.model2.vao = person2Model.vao;
+    console.log("Person 2 VAO created:", pedestrianGeometry.model2.vao);
+
     // Create simple pole geometry for traffic lights (just a cube stretched)
     const poleObject = new Object3D("pole_geom");
     poleObject.prepareVAO(gl, colorProgramInfo);
-    
+
     // Add dark gray color for the pole
     const numVerticesPole = poleObject.arrays.a_position.data.length / 3;
     const colorDataPole = [];
@@ -234,7 +279,7 @@ async function main() {
     poleObject.arrays.a_color.data = colorDataPole;
     poleObject.bufferInfo = twgl.createBufferInfoFromArrays(gl, poleObject.arrays);
     poleObject.vao = twgl.createVAOFromBufferInfo(gl, colorProgramInfo, poleObject.bufferInfo);
-    
+
     trafficLightGeometry.arrays = poleObject.arrays;
     trafficLightGeometry.bufferInfo = poleObject.bufferInfo;
     trafficLightGeometry.vao = poleObject.vao;
@@ -314,7 +359,7 @@ function groupTrafficLights() {
         processed.add(i);
         groupedTrafficLights.push(group);
     }
-    
+
     console.log(`Grouped ${trafficLights.length} traffic lights into ${groupedTrafficLights.length} poles`);
 }
 
@@ -511,27 +556,17 @@ function setupObjects(scene, gl, programInfo) {
         scene.addObject(pole);
     }
 
-    // PEDESTRIANS - Blue cubes
-    const baseCubeForPed = new Object3D(-1);
-    baseCubeForPed.prepareVAO(gl, programInfo);
-
-    // Add color data for pedestrians (blue)
-    const numVerticesPed = baseCubeForPed.arrays.a_position.data.length / 3;
-    const colorDataPed = [];
-    for (let i = 0; i < numVerticesPed; i++) {
-        colorDataPed.push(0.2, 0.4, 1.0, 1.0); // Blue
-    }
-    baseCubeForPed.arrays.a_color.data = colorDataPed;
-
-    pedestrianGeometry.arrays = baseCubeForPed.arrays;
-    pedestrianGeometry.bufferInfo = baseCubeForPed.bufferInfo;
-    pedestrianGeometry.vao = baseCubeForPed.vao;
-
+    // PEDESTRIANS - Using 3D models (persona1.obj and persona2.obj alternating)
+    // pedestrianGeometry is already loaded with both 3D models in main()
     for (const ped of pedestrians) {
-        ped.arrays = pedestrianGeometry.arrays;
-        ped.bufferInfo = pedestrianGeometry.bufferInfo;
-        ped.vao = pedestrianGeometry.vao;
-        ped.scale = { x: 0.15, y: 0.3, z: 0.15 };
+        // Start with model 1
+        ped.arrays = pedestrianGeometry.model1.arrays;
+        ped.bufferInfo = pedestrianGeometry.model1.bufferInfo;
+        ped.vao = pedestrianGeometry.model1.vao;
+        ped.scale = { x: 0.1, y: 0.1, z: 0.1 }; // Smaller scale (reduced from 0.12)
+        ped.yOffset = 0.5; // Offset to make base touch the ground (adjusted for model's Y range)
+        ped.isPedestrian = true; // Mark as pedestrian for easier identification
+        ped.isDynamic = true;
         scene.addObject(ped);
     }
 }
@@ -560,15 +595,15 @@ function updateSceneAgents() {
         }
     }
 
-    // 2. Remove dead agents
+    // 2. Remove dead agents (cars)
     // Filter scene.objects to remove dynamic objects that are no longer in the agents list
     scene.objects = scene.objects.filter(obj => {
-        if (obj.isDynamic) {
-            // Check if this agent ID is still in the global 'agents' list
+        if (obj.isDynamic && !obj.isPedestrian) {
+            // Check if this car agent ID is still in the global 'agents' list
             const stillActive = agents.some(a => a.id == obj.id);
             return stillActive;
         }
-        return true; // Keep static objects
+        return true; // Keep static objects and pedestrians (handled separately)
     });
 }
 
@@ -591,37 +626,75 @@ function getRotationFromOrientation(orientation) {
 
 function checkForNewPedestrians() {
     // Use the pedestrian geometry
-    if (!pedestrianGeometry.vao) {
+    if (!pedestrianGeometry.model1.vao || !pedestrianGeometry.model2.vao) {
         console.warn("Pedestrian geometry not initialized");
         return;
     }
 
+    // 1. Add new pedestrians
     for (const ped of pedestrians) {
         const existsInScene = scene.objects.find(obj => obj.id == ped.id);
         if (!existsInScene) {
-            // Copy visual properties from pedestrian geometry
-            ped.arrays = pedestrianGeometry.arrays;
-            ped.bufferInfo = pedestrianGeometry.bufferInfo;
-            ped.vao = pedestrianGeometry.vao;
+            // Copy visual properties from pedestrian geometry (start with model1)
+            ped.arrays = pedestrianGeometry.model1.arrays;
+            ped.bufferInfo = pedestrianGeometry.model1.bufferInfo;
+            ped.vao = pedestrianGeometry.model1.vao;
 
-            // Set appearance - smaller blue cubes for pedestrians
-            ped.scale = { x: 0.15, y: 0.3, z: 0.15 };
+            // Set appearance - using person model for pedestrians
+            ped.scale = { x: 0.1, y: 0.1, z: 0.1 }; // Smaller scale (reduced from 0.12)
+            ped.yOffset = 0.5; // Offset to make base touch the ground (adjusted for model's Y range)
+            ped.isPedestrian = true; // Mark as pedestrian
             ped.isDynamic = true;
             scene.addObject(ped);
         }
     }
+
+    // 2. Remove dead pedestrians
+    // Filter scene.objects to remove pedestrians that are no longer in the pedestrians list
+    scene.objects = scene.objects.filter(obj => {
+        if (obj.isPedestrian) {
+            // Check if this pedestrian ID is still in the global 'pedestrians' list
+            const stillActive = pedestrians.some(p => p.id == obj.id);
+            if (!stillActive) {
+                console.log(`Removing inactive pedestrian: ${obj.id}`);
+            }
+            return stillActive;
+        }
+        return true; // Keep non-pedestrian objects
+    });
 }
 
 // Draw an object with its corresponding transformations
 function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
+    // Alternate between pedestrian models for animation
+    if (object.isPedestrian) {
+        // This is a pedestrian - alternate models based on time
+        const animationSpeed = 300; // ms per frame
+        const currentFrame = Math.floor(Date.now() / animationSpeed) % 2;
+
+        if (currentFrame === 0) {
+            object.arrays = pedestrianGeometry.model1.arrays;
+            object.bufferInfo = pedestrianGeometry.model1.bufferInfo;
+            object.vao = pedestrianGeometry.model1.vao;
+        } else {
+            object.arrays = pedestrianGeometry.model2.arrays;
+            object.bufferInfo = pedestrianGeometry.model2.bufferInfo;
+            object.vao = pedestrianGeometry.model2.vao;
+        }
+    }
+
     // Use interpolation for dynamic objects (cars, pedestrians)
     let v3_tra;
     if (object.isDynamic && object.prevPosition) {
         v3_tra = interpolatePosition(object.prevPosition, object.position, fract);
+        // Apply Y offset for pedestrians to touch ground
+        if (object.yOffset !== undefined) {
+            v3_tra[1] += object.yOffset;
+        }
     } else {
         v3_tra = [
             object.posArray[0] + 0.5,
-            object.posArray[1],
+            object.posArray[1] + (object.yOffset || 0),
             object.posArray[2] + 0.5
         ];
     }
@@ -631,10 +704,16 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     const scaMat = M4.scale(v3_sca);
     const rotXMat = M4.rotationX(object.rotRad.x);
 
-    // Apply orientation-based rotation for cars (around Y axis)
+    // Apply orientation-based rotation for cars and pedestrians (around Y axis)
     let rotYAngle = object.rotRad.y;
     if (object.orientation) {
+        // Both use the same base rotation
         rotYAngle += getRotationFromOrientation(object.orientation);
+
+        // Pedestrians need an additional offset because their model faces a different direction
+        if (object.isPedestrian) {
+            rotYAngle += Math.PI / 2; // +90° offset for pedestrian model (was -90°, adding 180° total)
+        }
     }
     const rotYMat = M4.rotationY(rotYAngle);
 
@@ -727,7 +806,7 @@ async function drawScene() {
     for (const group of groupedTrafficLights) {
         if (numLights >= MAX_LIGHTS) break;
         // Check if any light in the group is green
-        const isGreen = group.lights.some(tl => 
+        const isGreen = group.lights.some(tl =>
             tl.state === true || tl.state === "Green" || tl.state === "green"
         );
 
@@ -806,7 +885,7 @@ function drawTrafficLightBulbs(gl, programInfo, viewProjectionMatrix) {
 
     for (const group of groupedTrafficLights) {
         // Check if any light in the group is green
-        const isGreen = group.lights.some(tl => 
+        const isGreen = group.lights.some(tl =>
             tl.state === true || tl.state === "Green" || tl.state === "green"
         );
 
@@ -866,34 +945,34 @@ function drawCarWheels(gl, programInfo, viewProjectionMatrix, fract) {
 
         // Wheel offsets in car's local space (car faces +X when rotation=0)
         const offsets = [
-            { lx:  0.28, ly: 0.08, lz: -0.22 },  // Front left
-            { lx:  0.28, ly: 0.08, lz:  0.22 },  // Front right
+            { lx: 0.28, ly: 0.08, lz: -0.22 },  // Front left
+            { lx: 0.28, ly: 0.08, lz: 0.22 },  // Front right
             { lx: -0.25, ly: 0.08, lz: -0.22 },  // Back left
-            { lx: -0.25, ly: 0.08, lz:  0.22 },  // Back right
+            { lx: -0.25, ly: 0.08, lz: 0.22 },  // Back right
         ];
 
         for (const off of offsets) {
             // Build transformation matrix manually
             // We want: Scale → RotZ (turn rim outward) → RotX (lay flat) → RotY (car orientation) → Translate
-            
+
             // 1. Scale the wheel
             let mat = M4.scale(wheelScale);
-            
+
             // 2. Rotate around Z 90° to turn the rim outward
             mat = M4.multiply(M4.rotationZ(Math.PI / 2), mat);
-            
+
             // 3. Rotate around X to lay the cylinder on its side
             mat = M4.multiply(M4.rotationX(Math.PI / 2), mat);
-            
+
             // 4. Rotate with car orientation around Y
             mat = M4.multiply(M4.rotationY(carRotY), mat);
-            
+
             // 5. Calculate world offset position
             const cosR = Math.cos(carRotY);
             const sinR = Math.sin(carRotY);
             const worldOffX = off.lx * cosR - off.lz * sinR;
             const worldOffZ = off.lx * sinR + off.lz * cosR;
-            
+
             // 6. Translate to world position
             const worldPos = [
                 carPos[0] + worldOffX,
