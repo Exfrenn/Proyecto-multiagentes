@@ -6,7 +6,7 @@ import { M4 } from '../libs/3d-lib';
 import { Scene3D } from '../libs/scene3d';
 import { Object3D } from '../libs/object3d';
 import { Camera3D } from '../libs/camera3d';
-import { loadObj } from '../libs/obj_loader.js';
+import { loadObj, loadMtl } from '../libs/obj_loader.js';
 import { Light3D } from '../libs/light3d';
 import { cubeTextured, skyboxCube } from '../libs/shapes';
 
@@ -212,15 +212,6 @@ async function main() {
 
     // Load building model
     const buildingArrays = await loadModel('../assets/models/building_1.obj');
-
-    // Add color data to the building model (light gray)
-    const numVerticesB = buildingArrays.a_position.data.length / 3;
-    const colorDataB = [];
-    for (let i = 0; i < numVerticesB; i++) {
-        colorDataB.push(0.7, 0.7, 0.7, 1.0); // Light Gray
-    }
-    buildingArrays.a_color.data = colorDataB;
-
     const buildingModel = createBufferAndVAO(gl, colorProgramInfo, buildingArrays);
 
     buildingGeometry.arrays = buildingModel.arrays;
@@ -360,13 +351,21 @@ function setupObjects(scene, gl, programInfo) {
         scene.addObject(agent);
     }
 
-    // OBSTACLES (buildings) - Gray
-    for (const agent of obstacles) {
+    // OBSTACLES (buildings) - Varied solid colors
+    const buildingColors = [
+        [0.7, 0.6, 0.5, 1.0], // Beige
+        [0.6, 0.7, 0.7, 1.0], // Light blue-gray
+        [0.8, 0.7, 0.6, 1.0], // Light tan
+        [0.5, 0.6, 0.6, 1.0], // Dark blue-gray
+    ];
+
+    for (let i = 0; i < obstacles.length; i++) {
+        const agent = obstacles[i];
         agent.arrays = buildingGeometry.arrays;
         agent.bufferInfo = buildingGeometry.bufferInfo;
         agent.vao = buildingGeometry.vao;
-        agent.scale = { x: 0.5, y: 0.5, z: 0.5 }; // Adjust scale as needed for the new model
-        agent.color = [0.6, 0.6, 0.6, 1.0]; // Gray
+        agent.scale = { x: 0.5, y: 0.5, z: 0.5 };
+        agent.color = buildingColors[i % buildingColors.length];
         scene.addObject(agent);
     }
 
@@ -646,7 +645,8 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
         u_ambientColor: object.color,
         u_diffuseColor: object.color,
         u_specularColor: [1.0, 1.0, 1.0, 1.0],
-        u_shininess: 50.0
+        u_shininess: 50.0,
+        u_emissive: object.emissive || [0, 0, 0, 0]
     };
 
     // Add texture uniform if object has texture
@@ -740,45 +740,46 @@ async function drawScene() {
 function drawTrafficLightBulbs(gl, programInfo, viewProjectionMatrix) {
     if (!bulbGeometry.vao) return;
 
-    // Create a temporary object for the bulb
-    // We'll use a small scale for the bulb
     const bulbScale = { x: 0.15, y: 0.15, z: 0.15 };
 
     for (const tl of trafficLights) {
-        // Determine color based on state
-        // Assuming state is boolean: true = Green, false = Red
-        // Or string: "Green", "Red"
-        let color = [1.0, 0.0, 0.0, 1.0]; // Default Red
-        let offset = { x: 0, y: 0, z: 0 };
+        const isGreen = (tl.state === true || tl.state === "Green" || tl.state === "green");
 
-        // Check state (adjust logic based on actual server data)
-        // Adjust heights based on your specific traffic light model
-        if (tl.state === true || tl.state === "Green" || tl.state === "green") {
-            color = [0.0, 1.0, 0.0, 1.0]; // Green
-            // Green light position (lower)
-            offset = { x: 0, y: 2.2, z: 0 };
-        } else {
-            color = [1.0, 0.0, 0.0, 1.0]; // Red
-            // Red light position (higher)
-            offset = { x: 0, y: 2.6, z: 0 };
-        }
+        // --- Draw Red Bulb ---
+        const redColor = [1.0, 0.0, 0.0, 1.0];
+        const redEmissive = isGreen ? [0.1, 0.0, 0.0, 1.0] : [1.0, 0.0, 0.0, 1.0]; // Dim if inactive, Bright if active
 
-        // Create the bulb object at the calculated position
-        const bulb = new Object3D("bulb", [
-            tl.position.x + offset.x,
-            tl.position.y + offset.y,
-            tl.position.z + offset.z
+        const redBulb = new Object3D("bulb_red", [
+            tl.position.x,
+            tl.position.y + 2.6, // Higher position
+            tl.position.z
         ]);
+        redBulb.scale = bulbScale;
+        redBulb.color = redColor;
+        redBulb.emissive = redEmissive;
+        redBulb.arrays = bulbGeometry.arrays;
+        redBulb.bufferInfo = bulbGeometry.bufferInfo;
+        redBulb.vao = bulbGeometry.vao;
 
-        bulb.scale = bulbScale;
-        bulb.color = color;
+        drawObject(gl, programInfo, redBulb, viewProjectionMatrix, 0);
 
-        // Use bulb geometry
-        bulb.arrays = bulbGeometry.arrays;
-        bulb.bufferInfo = bulbGeometry.bufferInfo;
-        bulb.vao = bulbGeometry.vao;
+        // --- Draw Green Bulb ---
+        const greenColor = [0.0, 1.0, 0.0, 1.0];
+        const greenEmissive = isGreen ? [0.0, 1.0, 0.0, 1.0] : [0.0, 0.1, 0.0, 1.0]; // Bright if active, Dim if inactive
 
-        drawObject(gl, programInfo, bulb, viewProjectionMatrix, 0);
+        const greenBulb = new Object3D("bulb_green", [
+            tl.position.x,
+            tl.position.y + 2.2, // Lower position
+            tl.position.z
+        ]);
+        greenBulb.scale = bulbScale;
+        greenBulb.color = greenColor;
+        greenBulb.emissive = greenEmissive;
+        greenBulb.arrays = bulbGeometry.arrays;
+        greenBulb.bufferInfo = bulbGeometry.bufferInfo;
+        greenBulb.vao = bulbGeometry.vao;
+
+        drawObject(gl, programInfo, greenBulb, viewProjectionMatrix, 0);
     }
 }
 

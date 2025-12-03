@@ -40,14 +40,13 @@ function parseFace(parts, objData, arrays) {
                 arrays.a_normal.data.push(...objData.normals[vert[2]]);
             }
 
-            if (materialInUse) {
+            if (materialInUse && materialInUse['Kd']) {
                 arrays.a_color.data.push(...materialInUse['Kd'], 1);
             } else {
-                // Force a color for each vertex
                 arrays.a_color.data.push(0.4, 0.4, 0.4, 1);
             }
             // This is not really necessary, but just in case
-            objData.faces.push({v: vert[0], t: vert[1], n: vert[2]});
+            objData.faces.push({ v: vert[0], t: vert[1], n: vert[2] });
         }
     });
 }
@@ -62,29 +61,29 @@ function loadObj(objString) {
     // Initialize a dummy item in the lists as index 0
     // This will make it easier to handle indices starting at 1 as used by OBJ
     let objData = {
-        vertices: [ [0, 0, 0] ],
-        normals: [ [0, 0, 0] ],
-        textures: [ [0, 0, 0] ],
-        faces: [ ],
+        vertices: [[0, 0, 0]],
+        normals: [[0, 0, 0]],
+        textures: [[0, 0, 0]],
+        faces: [],
     };
 
     // The array with the attributes that will be passed to WebGL
     let arrays = {
         a_position: {
             numComponents: 3,
-            data: [ ]
+            data: []
         },
         a_color: {
             numComponents: 4,
-            data: [ ]
+            data: []
         },
         a_normal: {
             numComponents: 3,
-            data: [ ]
+            data: []
         },
         a_texCoord: {
             numComponents: 2,
-            data: [ ]
+            data: []
         }
     };
 
@@ -142,20 +141,26 @@ function loadMtl(mtlString) {
         let parts = line.split(/\s+/);
         switch (parts[0]) {
             case 'newmtl':
-                // Add a new entry into the object
-                materials[parts[1]] = {};
+                // Add a new entry with default Kd (white)
+                materials[parts[1]] = {
+                    Kd: [0.8, 0.8, 0.8] // Default light gray
+                };
                 currentMtl = materials[parts[1]];
                 break;
             case 'Ns':  // Specular coefficient ("Shininess")
                 currentMtl['Ns'] = Number(parts[1]);
                 break;
-            case 'Kd':  // The specular color
+            case 'Kd':  // Diffuse color
                 partInfo = parts.slice(1).filter(v => v != '').map(Number);
                 currentMtl['Kd'] = partInfo;
+                break;
+            case 'map_Kd':  // Diffuse texture map
+                currentMtl['map_Kd'] = parts[1];
                 break;
         }
     });
 
+    console.log("Materials loaded:", materials);
     return materials;
 }
 

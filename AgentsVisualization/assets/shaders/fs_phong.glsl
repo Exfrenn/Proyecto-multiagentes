@@ -15,6 +15,7 @@ uniform vec4 u_ambientColor;
 uniform vec4 u_diffuseColor;
 uniform vec4 u_specularColor;
 uniform float u_shininess;
+uniform vec4 u_emissive;
 
 out vec4 outColor;
 
@@ -44,7 +45,8 @@ void main() {
     vec4 ambientColor = u_ambientColor * u_ambientLight;
     vec4 diffuseColor = light * u_diffuseColor * u_diffuseLight;
     vec4 specularColor = specular * u_specularColor * u_specularLight;
+    vec4 emissiveColor = u_emissive;
 
     // Use the color of the texture on the object
-    outColor = ambientColor + diffuseColor + specularColor;
+    outColor = ambientColor + diffuseColor + specularColor + emissiveColor;
 }
