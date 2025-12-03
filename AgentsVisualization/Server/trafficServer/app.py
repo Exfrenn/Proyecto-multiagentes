@@ -19,7 +19,7 @@ def agent_portrayal(agent):
         portrayal["color"] = "#aaa"
     
     if isinstance(agent, Pedestrian):
-        portrayal["color"] = "yellow"
+        portrayal["color"] = "purple"
 
     if isinstance(agent, Destination):
         portrayal["color"] = "lightgreen"

@@ -43,7 +43,7 @@ class CityModel(Model):
         self.car_destinations = []
         self.pedestrian_destinations = []
         
-        self.spawn_interval = spawn_interval
+        self.spawn_interval = 10
         self.spawn_timer = 0
         self.car_spawn_positions = [
             (0, 0),
@@ -51,13 +51,10 @@ class CityModel(Model):
             (0, 34),
             (35, 34)
         ]
-        self.pedestrian_spawn_positions = [
-            (10, 15)
-        ]
         self.max_cars = 1000
-        self.max_pedestrians = 5
+        self.max_pedestrians = 10
 
-        map_file_path = os.path.join(city_files_dir, "2025_base.txt")
+        map_file_path = os.path.join(city_files_dir, "2025_modified.txt")
         with open(map_file_path) as map_file:
             map_lines = map_file.readlines()
             self.width = len(map_lines[0])
@@ -119,6 +116,7 @@ class CityModel(Model):
 
         self.running = True
         self.pedestrians_enabled = True
+        
 
     def set_spawn_interval(self, interval):
         """Set the spawn interval for cars and pedestrians."""
@@ -159,13 +157,19 @@ class CityModel(Model):
                         active_cars_count += 1
                         
             
+            # Spawn pedestrians at random destinations, traveling to different destinations
             if self.pedestrians_enabled and active_pedestrians_count < self.max_pedestrians:
-                pedestrian_spawn_position = self.random.choice(self.pedestrian_spawn_positions)
-                pedestrian_spawn_cell = self.grid[pedestrian_spawn_position]
-                
-                pedestrians_at_spawn_location = [agent for agent in pedestrian_spawn_cell.agents if isinstance(agent, Pedestrian)]
-                
-                if not pedestrians_at_spawn_location:
-                    if self.pedestrian_destinations:
-                        selected_destination = self.random.choice(self.pedestrian_destinations)
-                        Pedestrian(self, pedestrian_spawn_cell, destination=selected_destination)
+                if len(self.pedestrian_destinations) >= 2:
+                    # Pick a random destination as spawn point
+                    spawn_destination = self.random.choice(self.pedestrian_destinations)
+                    spawn_cell = spawn_destination.cell
+                    
+                    # Check if there's already a pedestrian at this location
+                    pedestrians_at_spawn = [agent for agent in spawn_cell.agents if isinstance(agent, Pedestrian)]
+                    
+                    if not pedestrians_at_spawn:
+                        # Pick a different destination as the target
+                        available_targets = [d for d in self.pedestrian_destinations if d != spawn_destination]
+                        if available_targets:
+                            target_destination = self.random.choice(available_targets)
+                            Pedestrian(self, spawn_cell, destination=target_destination)

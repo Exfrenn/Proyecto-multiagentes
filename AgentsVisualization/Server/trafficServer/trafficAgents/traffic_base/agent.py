@@ -318,7 +318,7 @@ class Car(CellAgent):
     def _try_alternative_destinations(self):
         """Try to find a path to any reachable destination."""
         if not self.model.car_destinations:
-            self.transition_to_arrived()  # Remove if no destinations
+            self.transition_to_arrived()  
             return False
         
         # Shuffle destinations to try them in random order
@@ -442,6 +442,7 @@ class Pedestrian(CellAgent):
         self.path = []
         self.path_index = 0
         self.recalculate_path_threshold = 5
+        self.is_crossing = False  
         
         if self.destination is not None:
             self.calculate_path_to_destination()
@@ -511,13 +512,13 @@ class Pedestrian(CellAgent):
         for dx, dy in directions:
             next_pos = (current_pos[0] + dx, current_pos[1] + dy)
             
-            # Check if position is within bounds
+        
             if (0 <= next_pos[0] < self.model.grid.dimensions[0] and
                 0 <= next_pos[1] < self.model.grid.dimensions[1]):
                 
                 next_cell = self.model.grid[next_pos]
                 
-                # Check if next cell has walkable surface (sidewalk, pedestrian walk, or traffic light)
+
                 if self._has_walkable_surface(next_cell):
                     neighbors.append(next_pos)
         
@@ -688,9 +689,6 @@ class Pedestrian(CellAgent):
         if (not self.path or self.path_index >= len(self.path) or 
             (self.waiting_time >= self.recalculate_path_threshold)):
             
-            if self.waiting_time >= self.recalculate_path_threshold:
-                print(f"Pedestrian en {self.cell.coordinate}: Recalculando ruta (bloqueado {self.waiting_time} pasos)")
-            
             self.transition_navigating_state(NavigatingState.PLANNING_ROUTE)
             return 'replan'
         
@@ -709,23 +707,29 @@ class Pedestrian(CellAgent):
             self.transition_navigating_state(NavigatingState.BLOCKED)
             return 'wait'
         
-        # Check traffic light - pedestrians can cross when red (cars stopped)
-        if perception['traffic_light'] is not None:
-            # If light is green (True) = cars moving, pedestrians must wait
-            if perception['traffic_light'].state == True:
-                self.transition_navigating_state(NavigatingState.WAITING_TRAFFIC_LIGHT)
+
+
+
+        current_cell_has_traffic_light = any(isinstance(a, Traffic_Light) for a in self.cell.agents)
+        
+        if perception['pedestrian_walk'] is not None or current_cell_has_traffic_light:
+            self.is_crossing = True 
+        elif perception['sidewalk'] is not None:
+            self.is_crossing = False  
+        
+
+        if not self.is_crossing:
+            if perception['traffic_light'] is not None:
+                if perception['traffic_light'].state == True:
+                    self.transition_navigating_state(NavigatingState.WAITING_TRAFFIC_LIGHT)
+                    return 'wait'
+      
+            if len(perception['cars_ahead']) > 0:
+                self.transition_navigating_state(NavigatingState.AVOIDING_COLLISION)
                 return 'wait'
-            # If light is red (False) = cars stopped, pedestrians can cross
-            # Continue to other checks below
         
-        # Check for cars - important for pedestrian walks (crosswalks) without traffic lights
-        # Or as safety check even when traffic light is red
-        if len(perception['cars_ahead']) > 0:
-            self.transition_navigating_state(NavigatingState.AVOIDING_COLLISION)
-            return 'wait'
-        
-        # Avoid collision with other pedestrians
-        if len(perception['pedestrians_ahead']) > 0:
+
+        if len(perception['pedestrians_ahead']) >= 4:
             self.transition_navigating_state(NavigatingState.AVOIDING_COLLISION)
             return 'wait'
         
