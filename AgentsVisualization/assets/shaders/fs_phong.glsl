@@ -2,13 +2,17 @@
 precision highp float;
 
 in vec3 v_normal;
-in vec3 v_surfaceToLight;
+in vec3 v_surfaceWorldPosition;
 in vec3 v_surfaceToView;
 
 // Scene uniforms
 uniform vec4 u_ambientLight;
-uniform vec4 u_diffuseLight;
-uniform vec4 u_specularLight;
+
+// Lights
+#define MAX_LIGHTS 100
+uniform int u_numLights;
+uniform vec3 u_lightPositions[MAX_LIGHTS];
+uniform vec4 u_lightColors[MAX_LIGHTS]; // RGB + Intensity
 
 // Model uniforms
 uniform vec4 u_ambientColor;
@@ -20,33 +24,43 @@ uniform vec4 u_emissive;
 out vec4 outColor;
 
 void main() {
-    // v_normal must be normalized because the shader will interpolate
-    // it for each pixel
     vec3 normal = normalize(v_normal);
-
-    vec3 surfToLigthDirection = normalize(v_surfaceToLight);
     vec3 surfToViewDirection = normalize(v_surfaceToView);
 
-    // Finding the reflection vector
-    // https://en.wikipedia.org/wiki/Phong_reflection_model
-    vec3 reflectionVector = (2.0 * dot(surfToLigthDirection, normal)
-        * normal - surfToLigthDirection);
+    vec3 totalDiffuse = vec3(0.0);
+    vec3 totalSpecular = vec3(0.0);
 
-    float light = max(dot(normal, surfToLigthDirection), 0.0);
-    float specular = 0.0;
-    if (light > 0.0) {
-        float specular_dot = dot(surfToViewDirection, reflectionVector);
-        if (specular_dot > 0.0) {
-            specular = pow(specular_dot, u_shininess);
+    for (int i = 0; i < MAX_LIGHTS; i++) {
+        if (i >= u_numLights) break;
+
+        vec3 lightPos = u_lightPositions[i];
+        vec4 lightColor = u_lightColors[i];
+        
+        vec3 surfaceToLight = lightPos - v_surfaceWorldPosition;
+        float distance = length(surfaceToLight);
+        vec3 lightDir = normalize(surfaceToLight);
+
+        // Stronger attenuation to make lights more local and less overwhelming
+        float attenuation = 1.0 / (1.0 + 0.5 * distance * distance);
+        
+        // Diffuse
+        float diff = max(dot(normal, lightDir), 0.0);
+        totalDiffuse += diff * lightColor.rgb * attenuation;
+
+        // Specular
+        if (diff > 0.0) {
+            vec3 reflectionVector = reflect(-lightDir, normal);
+            float spec = pow(max(dot(surfToViewDirection, reflectionVector), 0.0), u_shininess);
+            totalSpecular += spec * lightColor.rgb * attenuation;
         }
     }
 
-    // Compute the three parts of the Phong lighting model
-    vec4 ambientColor = u_ambientColor * u_ambientLight;
-    vec4 diffuseColor = light * u_diffuseColor * u_diffuseLight;
-    vec4 specularColor = specular * u_specularColor * u_specularLight;
-    vec4 emissiveColor = u_emissive;
+    // Combine
+    vec4 ambient = u_ambientColor * u_ambientLight;
+    vec4 diffuse = vec4(totalDiffuse, 1.0) * u_diffuseColor;
+    vec4 specular = vec4(totalSpecular, 1.0) * u_specularColor;
+    vec4 emissive = u_emissive;
 
-    // Use the color of the texture on the object
-    outColor = ambientColor + diffuseColor + specularColor + emissiveColor;
+    outColor = ambient + diffuse + specular + emissive;
+    outColor.a = u_diffuseColor.a; // Keep original alpha
 }

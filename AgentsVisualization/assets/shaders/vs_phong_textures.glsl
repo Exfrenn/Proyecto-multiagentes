@@ -17,7 +17,7 @@ uniform float u_uvScale;
 
 // Transformed normals
 out vec3 v_normal;
-out vec3 v_surfaceToLight;
+out vec3 v_surfaceWorldPosition;
 out vec3 v_surfaceToView;
 out vec2 v_texCoord;
 
@@ -30,9 +30,7 @@ void main() {
 
     // Get world position of the surface
     vec3 surfaceWorldPosition = (u_world * a_position).xyz;
-
-    // Direction from the surface to the light
-    v_surfaceToLight = u_lightWorldPosition - surfaceWorldPosition;
+    v_surfaceWorldPosition = surfaceWorldPosition;
 
     // Direction from the surface to the view
     v_surfaceToView = u_viewWorldPosition - surfaceWorldPosition;

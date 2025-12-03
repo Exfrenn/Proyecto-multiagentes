@@ -688,13 +688,47 @@ async function drawScene() {
     gl.useProgram(colorProgramInfo.program);
 
     // Scene uniforms
+    // Scene uniforms
     const light = scene.lights[0];
+
+    // Collect lights
+    const lightPositions = [];
+    const lightColors = [];
+    let numLights = 0;
+    const MAX_LIGHTS = 100;
+
+    // 1. Sun Light
+    lightPositions.push(...light.posArray);
+    lightColors.push(...light.diffuse); // Use diffuse as main color
+    numLights++;
+
+    // 2. Traffic Lights
+    for (const tl of trafficLights) {
+        if (numLights >= MAX_LIGHTS) break;
+        const isGreen = (tl.state === true || tl.state === "Green" || tl.state === "green");
+
+        if (isGreen) {
+            // Green Bulb Position (Lower)
+            lightPositions.push(tl.position.x, tl.position.y + 2.2, tl.position.z);
+            lightColors.push(0.0, 0.5, 0.0, 1.0); // Green (Reduced intensity)
+        } else {
+            // Red Bulb Position (Higher)
+            lightPositions.push(tl.position.x, tl.position.y + 2.6, tl.position.z);
+            lightColors.push(0.5, 0.0, 0.0, 1.0); // Red (Reduced intensity)
+        }
+        numLights++;
+    }
+
+    // Pad arrays
+    while (lightPositions.length < MAX_LIGHTS * 3) lightPositions.push(0, 0, 0);
+    while (lightColors.length < MAX_LIGHTS * 4) lightColors.push(0, 0, 0, 0);
+
     let globalUniforms = {
-        u_lightWorldPosition: light.posArray,
         u_viewWorldPosition: scene.camera.posArray,
         u_ambientLight: light.ambient,
-        u_diffuseLight: light.diffuse,
-        u_specularLight: light.specular
+        u_numLights: numLights,
+        u_lightPositions: lightPositions,
+        u_lightColors: lightColors
     }
     twgl.setUniforms(colorProgramInfo, globalUniforms);
 
