@@ -43,7 +43,7 @@ class CityModel(Model):
         self.car_destinations = []
         self.pedestrian_destinations = []
         
-        self.spawn_interval = 10
+        self.spawn_interval = spawn_interval
         self.spawn_timer = 0
         self.car_spawn_positions = [
             (0, 0),

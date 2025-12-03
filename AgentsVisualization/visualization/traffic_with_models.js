@@ -102,7 +102,8 @@ const pedestrianGeometry = {
         arrays: null,
         bufferInfo: null,
         vao: null
-    }
+    },
+    texture: null // Shared texture for both models
 };
 
 // Store geometry for dynamic agents (car body)
@@ -226,20 +227,22 @@ async function main() {
     wheelGeometry.vao = wheelModel.vao;
     console.log("Wheel VAO created:", wheelGeometry.vao);
 
+    // Load pedestrian texture (Steve skin)
+    pedestrianGeometry.texture = twgl.createTexture(gl, {
+        min: gl.NEAREST,  // Use NEAREST for pixel art style (Minecraft)
+        mag: gl.NEAREST,
+        src: '../assets/textures/steve_diffuse.png'
+    });
+    console.log("Pedestrian texture loaded");
+
     // Load pedestrian model 1 (persona1)
     const person1Arrays = await loadModel('../assets/models/AddedModels/persona1.obj');
     console.log("Person model 1 loaded:", person1Arrays);
     console.log("Person 1 vertices:", person1Arrays.a_position.data.length / 3);
+    console.log("Person 1 texCoords:", person1Arrays.a_texCoord.data.length / 2);
 
-    // Add blue color for pedestrians
-    const numVerticesPerson1 = person1Arrays.a_position.data.length / 3;
-    const colorDataPerson1 = [];
-    for (let i = 0; i < numVerticesPerson1; i++) {
-        colorDataPerson1.push(0.2, 0.4, 1.0, 1.0); // Blue
-    }
-    person1Arrays.a_color = { numComponents: 4, data: colorDataPerson1 };
-
-    const person1Model = createBufferAndVAO(gl, colorProgramInfo, person1Arrays);
+    // Create VAO with textureProgramInfo for texture support
+    const person1Model = createBufferAndVAO(gl, textureProgramInfo, person1Arrays);
     pedestrianGeometry.model1.arrays = person1Model.arrays;
     pedestrianGeometry.model1.bufferInfo = person1Model.bufferInfo;
     pedestrianGeometry.model1.vao = person1Model.vao;
@@ -249,16 +252,10 @@ async function main() {
     const person2Arrays = await loadModel('../assets/models/AddedModels/persona2.obj');
     console.log("Person model 2 loaded:", person2Arrays);
     console.log("Person 2 vertices:", person2Arrays.a_position.data.length / 3);
+    console.log("Person 2 texCoords:", person2Arrays.a_texCoord.data.length / 2);
 
-    // Add blue color for second pedestrian model
-    const numVerticesPerson2 = person2Arrays.a_position.data.length / 3;
-    const colorDataPerson2 = [];
-    for (let i = 0; i < numVerticesPerson2; i++) {
-        colorDataPerson2.push(0.2, 0.4, 1.0, 1.0); // Blue
-    }
-    person2Arrays.a_color = { numComponents: 4, data: colorDataPerson2 };
-
-    const person2Model = createBufferAndVAO(gl, colorProgramInfo, person2Arrays);
+    // Create VAO with textureProgramInfo for texture support
+    const person2Model = createBufferAndVAO(gl, textureProgramInfo, person2Arrays);
     pedestrianGeometry.model2.arrays = person2Model.arrays;
     pedestrianGeometry.model2.bufferInfo = person2Model.bufferInfo;
     pedestrianGeometry.model2.vao = person2Model.vao;
@@ -641,11 +638,17 @@ function checkForNewPedestrians() {
             ped.bufferInfo = pedestrianGeometry.model1.bufferInfo;
             ped.vao = pedestrianGeometry.model1.vao;
 
-            // Set appearance - using person model for pedestrians
+            // Set appearance - using person model for pedestrians with texture
             ped.scale = { x: 0.1, y: 0.1, z: 0.1 }; // Smaller scale (reduced from 0.12)
             ped.yOffset = 0.5; // Offset to make base touch the ground (adjusted for model's Y range)
             ped.isPedestrian = true; // Mark as pedestrian
             ped.isDynamic = true;
+            
+            // Use texture shader and texture for pedestrians
+            ped.programInfo = textureProgramInfo;
+            ped.texture = pedestrianGeometry.texture;
+            ped.color = [1.0, 1.0, 1.0, 1.0]; // White to show texture colors properly
+            
             scene.addObject(ped);
         }
     }

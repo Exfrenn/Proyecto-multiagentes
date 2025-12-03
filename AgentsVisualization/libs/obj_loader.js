@@ -33,7 +33,9 @@ function parseFace(parts, objData, arrays) {
             arrays.a_position.data.push(...objData.vertices[vert[0]]);
             // Second element is the texture index
             if (vert.length > 1 && vert[1] != "") {
-                arrays.a_texCoord.data.push(...objData.textures[vert[1]]);
+                const uv = objData.textures[vert[1]];
+                // Flip V coordinate (1 - v) because WebGL has different UV origin than Blender
+                arrays.a_texCoord.data.push(uv[0], 1.0 - uv[1]);
             }
             // Third element is the normal index
             if (vert.length > 2 && vert[2] != "") {
