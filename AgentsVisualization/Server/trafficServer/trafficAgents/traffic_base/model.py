@@ -53,8 +53,12 @@ class CityModel(Model):
         ]
         self.max_cars = 1000
         self.max_pedestrians = 10
+        
+        # Stop condition: consecutive times all spawns were blocked
+        self.consecutive_blocked_spawns = 0
+        self.max_blocked_spawns = 3
 
-        map_file_path = os.path.join(city_files_dir, "2025_modified.txt")
+        map_file_path = os.path.join(city_files_dir, "2025_base.txt")
         with open(map_file_path) as map_file:
             map_lines = map_file.readlines()
             self.width = len(map_lines[0])
@@ -139,6 +143,7 @@ class CityModel(Model):
             active_pedestrians_count = sum(1 for agent in self.agents if isinstance(agent, Pedestrian) and agent.is_active())
             
             # Spawn cars at ALL spawn positions simultaneously
+            spawned_any = False
             for car_spawn_position in self.car_spawn_positions:
                 if active_cars_count >= self.max_cars:
                     break
@@ -152,9 +157,19 @@ class CityModel(Model):
                         selected_destination = self.random.choice(self.car_destinations)
                         Car(self, car_spawn_cell, destination=selected_destination)
                         active_cars_count += 1
+                        spawned_any = True
                     else:
                         Car(self, car_spawn_cell, destination=None)
                         active_cars_count += 1
+                        spawned_any = True
+            
+            # Check if all spawn points were blocked
+            if not spawned_any and active_cars_count < self.max_cars:
+                self.consecutive_blocked_spawns += 1
+                if self.consecutive_blocked_spawns >= self.max_blocked_spawns:
+                    self.running = False
+            else:
+                self.consecutive_blocked_spawns = 0
                         
             
             # Spawn pedestrians at random destinations, traveling to different destinations

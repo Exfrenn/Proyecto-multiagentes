@@ -32,6 +32,10 @@ class Car(CellAgent):
         self.failed_path_attempts = 0
         self.max_failed_attempts = 3
         
+        # Randomization for path diversity - each car has different preferences
+        self.congestion_weight = model.random.uniform(2.0, 8.0)  # How much to avoid traffic
+        self.path_randomness = model.random.uniform(0.0, 3.0)    # Random cost variation
+        
         if self.destination is not None:
             success = self.calculate_path_to_destination()
             # If can't find path, try other destinations
@@ -78,6 +82,21 @@ class Car(CellAgent):
     def heuristic(self, pos1, pos2):
         """Calculate Manhattan distance between two positions."""
         return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+    
+    def get_movement_cost(self, cell):
+        """Calculate cost of moving to a cell based on congestion and randomness."""
+        base_cost = 1.0
+        
+        # Count cars in this cell
+        cars_in_cell = sum(1 for agent in cell.agents if isinstance(agent, Car))
+        
+        # Add congestion penalty
+        congestion_cost = cars_in_cell * self.congestion_weight
+        
+        # Add random variation to create path diversity
+        random_cost = self.model.random.uniform(0, self.path_randomness)
+        
+        return base_cost + congestion_cost + random_cost
     
     def get_valid_neighbors(self, cell):
         """Get valid neighboring cells respecting one-way roads."""
@@ -175,7 +194,10 @@ class Car(CellAgent):
             neighbors = self.get_valid_neighbors(current_cell)
             
             for neighbor_pos in neighbors:
-                tentative_g_score = g_score[current_pos] + 1
+                neighbor_cell = self.model.grid[neighbor_pos]
+                # Use dynamic movement cost based on congestion and randomness
+                move_cost = self.get_movement_cost(neighbor_cell)
+                tentative_g_score = g_score[current_pos] + move_cost
                 
                 if neighbor_pos not in g_score or tentative_g_score < g_score[neighbor_pos]:
                     came_from[neighbor_pos] = current_pos
