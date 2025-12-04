@@ -220,6 +220,31 @@ def getDestinations():
         except Exception as e:
             print(e)
             return jsonify({"message": "Error getting destinations positions", "error": str(e)}), 500
+        
+@app.route("/getPedestrianDestinations", methods = ['GET'])
+@cross_origin()
+def getPedestrianDestinations():
+    global city_model
+    
+    if request.method == "GET":
+        try:
+            # Use the pedestrian_destinations list from the model
+            pedestrian_destinations = city_model.pedestrian_destinations
+            
+            PedestrianDestinationPositions = [
+                {
+                    "id": str(dest.unique_id), 
+                    "x": dest.cell.coordinate[0], 
+                    "y": 1, 
+                    "z": dest.cell.coordinate[1]
+                }
+                for dest in pedestrian_destinations
+            ]
+
+            return jsonify({"PedestrianDestinationpos": PedestrianDestinationPositions})
+        except Exception as e:
+            print(e)
+            return jsonify({"message": "Error getting pedestrian destinations positions", "error": str(e)}), 500
 
 @app.route("/getSidewalks", methods = ['GET'])
 @cross_origin()

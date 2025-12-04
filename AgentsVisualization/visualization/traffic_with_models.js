@@ -16,8 +16,9 @@ import {
     update, getAgents, getObstacles, getRoads,
     roads, getDestinations, destinations, getTrafficLights, trafficLights,
     getSidewalks, sidewalks, getPedestrianWalks, pedestrianWalks,
-    setSpawnInterval, setPedestriansEnabled, resetSimulation as apiResetSimulation, simulationSettings,
-    pedestrians, getPedestrians
+    setSpawnInterval, setPedestriansEnabled, resetSimulation as apiResetSimulation, simulationSettings, getPedestrianDestinations,
+    pedestrians, getPedestrians,
+    pedestrianDestinations
 } from '../libs/api_connection.js';
 
 // Define the shader code, using GLSL 3.00
@@ -77,6 +78,8 @@ const settings = {
             await getTrafficLights();
             await getAgents();
             await getPedestrians();
+            await getPedestrianDestinations();
+
 
             // Re-setup objects
             setupObjects(scene, gl, colorProgramInfo);
@@ -345,6 +348,7 @@ async function main() {
     await getPedestrianWalks();
     await getTrafficLights();
     await getPedestrians();
+    await getPedestrianDestinations();
 
     // Group traffic lights into pairs (one pole per pair)
     groupTrafficLights();
@@ -500,6 +504,12 @@ function setupObjects(scene, gl, programInfo) {
         src: '../assets/textures/Road/dest1.jpg'
     });
 
+    const pedestrianDestinationTexture = twgl.createTexture(gl, {
+        min: gl.NEAREST,
+        mag: gl.NEAREST,
+        src: '../assets/textures/Road/destPed.jpg'
+    });
+
     // Create textured cube for roads
     const roadCube = new Object3D(-1);
     roadCube.arrays = cubeTextured(1);
@@ -567,7 +577,7 @@ function setupObjects(scene, gl, programInfo) {
         scene.addObject(pedestrianWalk);
     }
 
-    // DESTINATIONS - Green
+    // DESTINATIONS - Purple
     for (const destination of destinations) {
         destination.arrays = roadCube.arrays;
         destination.bufferInfo = roadCube.bufferInfo;
@@ -581,6 +591,20 @@ function setupObjects(scene, gl, programInfo) {
         scene.addObject(destination);
     }
 
+    // PEDESTRIAN DESTINATIONS - Green (elevated slightly above sidewalks)
+    for (const pedestrianDestination of pedestrianDestinations) {
+        pedestrianDestination.position.y = 1.1; // Slightly above sidewalk level
+        pedestrianDestination.arrays = roadCube.arrays;
+        pedestrianDestination.bufferInfo = roadCube.bufferInfo;
+        pedestrianDestination.vao = roadCube.vao;
+        pedestrianDestination.scale = { x: 0.5, y: 0.08, z: 0.5 };
+        pedestrianDestination.color = [0.0, 1.0, 0.0, 1.0]; // Green
+        pedestrianDestination.texture = pedestrianDestinationTexture;
+        pedestrianDestination.programInfo = textureProgramInfo; // Use texture program
+        pedestrianDestination.useWorldUV = true;
+        pedestrianDestination.uvScale = 1.0;
+        scene.addObject(pedestrianDestination);
+    }
 
     // TRAFFIC LIGHTS - Simple poles for grouped lights
     for (let i = 0; i < groupedTrafficLights.length; i++) {

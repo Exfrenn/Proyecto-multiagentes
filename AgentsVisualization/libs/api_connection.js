@@ -22,6 +22,7 @@ const roads = [];
 const destinations = [];
 const sidewalks = [];
 const pedestrianWalks = [];
+const pedestrianDestinations = [];
 
 // Define the data object
 const initData = {
@@ -325,6 +326,27 @@ async function getDestinations() {
     }
 }
 
+async function getPedestrianDestinations() {
+    try {
+        let response = await fetch(agent_server_uri + "getPedestrianDestinations");
+        if (response.ok) {
+            let result = await response.json();
+            // Clear existing pedestrian destinations before adding new ones
+            pedestrianDestinations.length = 0;
+            for (const dest of result.PedestrianDestinationpos) {
+                const newDest = new Object3D(dest.id, [dest.x, dest.y, dest.z]);
+                pedestrianDestinations.push(newDest);
+            }
+            console.log("Pedestrian destinations loaded:", pedestrianDestinations.length);
+        } else {
+            let result = await response.json();
+            console.log("Error:", result.message, result.error);
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
+
 async function getSidewalks() {
     try {
         let response = await fetch(agent_server_uri + "getSidewalks");
@@ -453,6 +475,6 @@ async function update() {
 export {
     agents, pedestrians, obstacles, trafficLights, roads, destinations, sidewalks, pedestrianWalks,
     initAgentsModel, update, getAgents, getObstacles, getTrafficLights, getRoads, getDestinations,
-    getSidewalks, getPedestrianWalks, getPedestrians,
-    setSpawnInterval, setPedestriansEnabled, resetSimulation, simulationSettings
+    getSidewalks, getPedestrianWalks, getPedestrians, pedestrianDestinations,
+    setSpawnInterval, setPedestriansEnabled, resetSimulation, simulationSettings, getPedestrianDestinations
 };
