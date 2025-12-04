@@ -312,11 +312,13 @@ async function main() {
     const buildingFiles = [
         { obj: '../assets/models/building_1.obj', mtl: '../assets/models/building_1.mtl', scale: 0.5 },
         { obj: '../assets/models/building_2.obj', mtl: '../assets/models/building_2.mtl', scale: 0.5 },
-        // { obj: '../assets/models/building_04.obj', mtl: '../assets/models/building_04.mtl', scale: 0.3 },
-        // { obj: '../assets/models/house.obj', mtl: '../assets/models/house.mtl', scale: 0.4 },
         { obj: '../assets/models/large_buildingE.obj', mtl: '../assets/models/large_buildingE.mtl', scale: 0.8 },
         { obj: '../assets/models/skyscraperE.obj', mtl: '../assets/models/skyscraperE.mtl', scale: 0.8 },
+        { obj: '../assets/models/pizzaCorner.obj', mtl: '../assets/models/pizzaCorner.mtl', scale: 0.8 },
         { obj: '../assets/models/small_buildingB.obj', mtl: '../assets/models/small_buildingB.mtl', scale: 1.25 },
+        { obj: '../assets/models/small_buildingF.obj', mtl: '../assets/models/small_buildingF.mtl', scale: 1.25 },
+        { obj: '../assets/models/skyscraperD.obj', mtl: '../assets/models/skyscraperD.mtl', scale: 1 },
+        { obj: '../assets/models/large_buildingC.obj', mtl: '../assets/models/large_buildingC.mtl', scale: 1 },
     ];
 
     for (const building of buildingFiles) {
@@ -1278,27 +1280,5 @@ function createBufferAndVAO(gl, programInfo, arrays) {
     const vao = twgl.createVAOFromBufferInfo(gl, programInfo, bufferInfo);
     return { arrays, bufferInfo, vao };
 }
-
-// Helper function to create a colored cube
-function createColoredCube(color) {
-    const cube = new Object3D(-1);
-    cube.prepareVAO(gl, colorProgramInfo);
-
-    // Add color data
-    const numVertices = cube.arrays.a_position.data.length / 3;
-    const colorData = [];
-    for (let i = 0; i < numVertices; i++) {
-        colorData.push(...color); // Spread the RGBA values
-    }
-    cube.arrays.a_color.data = colorData;
-
-    // Recreate buffers with new color data
-    cube.bufferInfo = twgl.createBufferInfoFromArrays(gl, cube.arrays);
-    cube.vao = twgl.createVAOFromBufferInfo(gl, colorProgramInfo, cube.bufferInfo);
-
-    return cube;
-}
-
-
 
 main();
