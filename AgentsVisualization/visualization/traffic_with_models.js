@@ -117,7 +117,9 @@ const agentGeometry = {
 const wheelGeometry = {
     arrays: null,
     bufferInfo: null,
-    vao: null
+    vao: null,
+    textureVao: null,  // VAO for texture shader
+    texture: null       // Wheel texture
 };
 
 // Store geometry for traffic light poles (simple cubes)
@@ -208,19 +210,49 @@ async function main() {
     const wheelArrays = await loadModel('../assets/models/wheel.obj');
     console.log("Wheel model loaded:", wheelArrays);
     console.log("Wheel vertices:", wheelArrays.a_position.data.length / 3);
+    console.log("Wheel has texCoords:", wheelArrays.a_texCoord ? "yes" : "no");
 
-    // Add dark color for wheels
+    // Add white color for wheels (will be tinted by texture)
     const numVerticesWheel = wheelArrays.a_position.data.length / 3;
     const colorDataWheel = [];
     for (let i = 0; i < numVerticesWheel; i++) {
-        colorDataWheel.push(1, 1, 1, 1.0); // Dark gray
+        colorDataWheel.push(1, 1, 1, 1.0); // White to show texture colors properly
     }
     wheelArrays.a_color = { numComponents: 4, data: colorDataWheel };
 
+    // If wheel model doesn't have texture coordinates, generate simple ones
+    if (!wheelArrays.a_texCoord || wheelArrays.a_texCoord.data.length === 0) {
+        console.log("Generating texture coordinates for wheel...");
+        const texCoordData = [];
+        for (let i = 0; i < numVerticesWheel; i++) {
+            // Simple cylindrical UV mapping based on position
+            const x = wheelArrays.a_position.data[i * 3];
+            const y = wheelArrays.a_position.data[i * 3 + 1];
+            const z = wheelArrays.a_position.data[i * 3 + 2];
+            // Map angle around Y axis to U, and Y position to V
+            const u = (Math.atan2(z, x) / (2 * Math.PI)) + 0.5;
+            const v = y * 0.5 + 0.5;
+            texCoordData.push(u, v);
+        }
+        wheelArrays.a_texCoord = { numComponents: 2, data: texCoordData };
+    }
+
+    // Create VAO for color shader (fallback)
     const wheelModel = createBufferAndVAO(gl, colorProgramInfo, wheelArrays);
     wheelGeometry.arrays = wheelModel.arrays;
     wheelGeometry.bufferInfo = wheelModel.bufferInfo;
     wheelGeometry.vao = wheelModel.vao;
+    
+    // Create VAO for texture shader
+    wheelGeometry.textureVao = twgl.createVAOFromBufferInfo(gl, textureProgramInfo, wheelModel.bufferInfo);
+    
+    // Load wheel texture (Mazda rim)
+    wheelGeometry.texture = twgl.createTexture(gl, {
+        min: gl.LINEAR_MIPMAP_LINEAR,
+        mag: gl.LINEAR,
+        src: '../assets/textures/Wheels/mazda_rim_and_tire_20131008_1042452437.jpg'
+    });
+    console.log("Wheel texture loaded");
     console.log("Wheel VAO created:", wheelGeometry.vao);
 
     // Load pedestrian texture (Steve skin)
@@ -602,6 +634,8 @@ function updateSceneAgents() {
             agent.prevOrientation = agent.orientation; // Track previous orientation for wheel steering
             agent.wheelSteerAngle = 0; // Current steering angle for front wheels
             agent.targetSteerAngle = 0; // Target steering angle
+            agent.wheelRotation = 0; // Rotation of wheels around their axle (rolling)
+            agent.lastPosition = { x: agent.position.x, y: agent.position.y, z: agent.position.z };
             scene.addObject(agent);
         } else {
             // Check if orientation changed and update steering
@@ -623,6 +657,15 @@ function updateSceneAgents() {
             existsInScene.prevOrientation = newOrientation;
             // Sync orientation to scene object (important!)
             existsInScene.orientation = newOrientation;
+            
+            // Update wheel rotation - add one full step worth of rotation
+            const wheelRadius = 0.08;
+            const cellSize = 1.0;
+            const rotationPerStep = cellSize / wheelRadius;
+            if (existsInScene.wheelRotation === undefined) existsInScene.wheelRotation = 0;
+            existsInScene.wheelRotation += rotationPerStep;
+            // Keep within bounds
+            existsInScene.wheelRotation = existsInScene.wheelRotation % (2 * Math.PI * 10);
         }
     }
 
@@ -941,9 +984,8 @@ async function drawScene() {
     twgl.setUniforms(colorProgramInfo, globalUniforms);
     drawTrafficLightBulbs(gl, colorProgramInfo, viewProjectionMatrix);
 
-    // Draw car wheels
-    gl.useProgram(colorProgramInfo.program);
-    drawCarWheels(gl, colorProgramInfo, viewProjectionMatrix, fract);
+    // Draw car wheels with texture
+    drawCarWheels(gl, textureProgramInfo, viewProjectionMatrix, fract, globalUniforms);
 
     // Update the scene after the elapsed duration
     if (elapsed >= duration) {
@@ -996,15 +1038,18 @@ function drawTrafficLightBulbs(gl, programInfo, viewProjectionMatrix) {
     }
 }
 
-// Helper to draw car wheels
-// Helper to draw car wheels
-function drawCarWheels(gl, programInfo, viewProjectionMatrix, fract) {
-    if (!wheelGeometry.vao) {
+// Helper to draw car wheels with texture
+function drawCarWheels(gl, programInfo, viewProjectionMatrix, fract, globalUniforms) {
+    if (!wheelGeometry.vao || !wheelGeometry.textureVao) {
         return;
     }
 
     const wheelScale = [0.08, 0.08, 0.08]; // Escala de las ruedas
     const steerLerpSpeed = 0.15; // Speed at which wheels turn (0-1, higher = faster)
+    
+    // Use texture program for wheels
+    gl.useProgram(programInfo.program);
+    twgl.setUniforms(programInfo, globalUniforms);
 
     // Use scene.objects and identify cars by their vao (same as agentGeometry)
     for (const obj of scene.objects) {
@@ -1018,6 +1063,7 @@ function drawCarWheels(gl, programInfo, viewProjectionMatrix, fract) {
         // Initialize steering properties if not present
         if (obj.wheelSteerAngle === undefined) obj.wheelSteerAngle = 0;
         if (obj.targetSteerAngle === undefined) obj.targetSteerAngle = 0;
+        if (obj.wheelRotation === undefined) obj.wheelRotation = 0;
 
         // Smoothly interpolate wheel steering angle towards target
         obj.wheelSteerAngle += (obj.targetSteerAngle - obj.wheelSteerAngle) * steerLerpSpeed;
@@ -1026,11 +1072,13 @@ function drawCarWheels(gl, programInfo, viewProjectionMatrix, fract) {
             obj.wheelSteerAngle = 0;
         }
         const wheelSteer = obj.wheelSteerAngle;
-        
-        // Debug: log when steering is active
-        if (Math.abs(wheelSteer) > 0.01) {
-            console.log(`Car ${obj.id} steering: ${wheelSteer.toFixed(3)} rad (${(wheelSteer * 180 / Math.PI).toFixed(1)}°)`);
-        }
+
+        // Calculate wheel rolling - base rotation plus interpolated fraction
+        const wheelRadius = 0.08;
+        const cellSize = 1.0;
+        const rotationPerStep = cellSize / wheelRadius;
+        // Smooth rolling: base rotation + fraction of current step
+        const wheelRoll = obj.wheelRotation + (rotationPerStep * fract);
 
         // Interpolate car position
         let carPos;
@@ -1053,43 +1101,45 @@ function drawCarWheels(gl, programInfo, viewProjectionMatrix, fract) {
             // For front wheels, add steering rotation
             const steerAngle = off.isFront ? wheelSteer : 0;
 
-            // Build transformation matrix
-            // Order of operations on vertices (right to left in matrix multiplication):
-            // Scale -> Orient wheel -> Steering -> Local offset -> Car rotation -> World position
+            // Build transformation matrix step by step:
+            // The wheel is a cylinder with axis along Y.
+            // We need to:
+            // 1. Make it roll (rotate around Z - this spins the wheel forward/backward)
+            // 2. Tilt it to be vertical (rotate around Z by 90°)
+            // 3. Turn the rim to face outward (rotate around X by 90°)
+            // 4. Apply steering (rotate around Y)
+            // 5. Position relative to car
+            // 6. Apply car orientation
+            // 7. Move to world position
             
-            // We'll build from left to right: worldPos * carRot * localOffset * steering * orient * scale
-            let mat = M4.translation(carPos);                           // World position
-            mat = M4.multiply(mat, M4.rotationY(carRotY));              // Car orientation
-            mat = M4.multiply(mat, M4.translation([off.lx, off.ly, off.lz])); // Local offset
-            mat = M4.multiply(mat, M4.rotationY(steerAngle));           // Steering
-            mat = M4.multiply(mat, M4.rotationZ(Math.PI / 2));          // Orient: tilt to make vertical
-            mat = M4.multiply(mat, M4.rotationY(Math.PI / 2));          // Orient: rotate rim to face out
-            mat = M4.multiply(mat, M4.scale(wheelScale));               // Scale
+            let mat = M4.translation(carPos);                           // 7. World position
+            mat = M4.multiply(mat, M4.rotationY(carRotY));              // 6. Car orientation
+            mat = M4.multiply(mat, M4.translation([off.lx, off.ly, off.lz])); // 5. Local offset
+            mat = M4.multiply(mat, M4.rotationY(steerAngle));           // 4. Steering
+            mat = M4.multiply(mat, M4.rotationX(Math.PI / 2));          // 3. Tilt rim to face outward (Z-axis)
+            mat = M4.multiply(mat, M4.rotationZ(Math.PI / 2));          // 2. Stand wheel upright
+            mat = M4.multiply(mat, M4.rotationX(wheelRoll));            // 1. Roll the wheel (spin forward)
+            mat = M4.multiply(mat, M4.scale(wheelScale));               // 0. Scale
 
             // Calculate matrices for shader
             const wvpMat = M4.multiply(viewProjectionMatrix, mat);
             const normalMat = M4.transpose(M4.inverse(mat));
 
-            // Different colors for front vs back wheels
-            const wheelColor = off.isFront 
-                ? { ambient: [0.3, 0.0, 0.0, 1.0], diffuse: [0.8, 0.1, 0.1, 1.0] }  // Red for front wheels
-                : { ambient: [0.15, 0.15, 0.15, 1.0], diffuse: [0.2, 0.2, 0.2, 1.0] }; // Dark gray for back wheels
-
-            // Set uniforms
+            // Set uniforms for textured wheel
             const wheelUniforms = {
                 u_world: mat,
                 u_worldInverseTransform: normalMat,
                 u_worldViewProjection: wvpMat,
-                u_ambientColor: wheelColor.ambient,
-                u_diffuseColor: wheelColor.diffuse,
-                u_specularColor: [0.3, 0.3, 0.3, 1.0],
-                u_shininess: 30.0,
-                u_emissive: [0, 0, 0, 0]
+                u_ambientColor: [0.3, 0.3, 0.3, 1.0],
+                u_diffuseColor: [1.0, 1.0, 1.0, 1.0],  // White to show texture properly
+                u_specularColor: [0.5, 0.5, 0.5, 1.0],
+                u_shininess: 50.0,
+                u_emissive: [0, 0, 0, 0],
+                u_texture: wheelGeometry.texture
             };
 
-            gl.useProgram(programInfo.program);
             twgl.setUniforms(programInfo, wheelUniforms);
-            gl.bindVertexArray(wheelGeometry.vao);
+            gl.bindVertexArray(wheelGeometry.textureVao);
             twgl.drawBufferInfo(gl, wheelGeometry.bufferInfo);
         }
     }
