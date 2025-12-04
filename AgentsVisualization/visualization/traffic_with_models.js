@@ -282,9 +282,9 @@ async function main() {
         { obj: '../assets/models/building_2.obj', mtl: '../assets/models/building_2.mtl', scale: 0.5 },
         // { obj: '../assets/models/building_04.obj', mtl: '../assets/models/building_04.mtl', scale: 0.3 },
         // { obj: '../assets/models/house.obj', mtl: '../assets/models/house.mtl', scale: 0.4 },
-        { obj: '../assets/models/large_buildingE.obj', mtl: '../assets/models/large_buildingE.mtl', scale: 1 },
-        { obj: '../assets/models/skyscraperE.obj', mtl: '../assets/models/skyscraperE.mtl', scale: 1 },
-        { obj: '../assets/models/small_buildingB.obj', mtl: '../assets/models/small_buildingB.mtl', scale: 1.5 },
+        { obj: '../assets/models/large_buildingE.obj', mtl: '../assets/models/large_buildingE.mtl', scale: 0.8 },
+        { obj: '../assets/models/skyscraperE.obj', mtl: '../assets/models/skyscraperE.mtl', scale: 0.8 },
+        { obj: '../assets/models/small_buildingB.obj', mtl: '../assets/models/small_buildingB.mtl', scale: 1.25 },
     ];
 
     for (const building of buildingFiles) {
@@ -571,7 +571,7 @@ function setupObjects(scene, gl, programInfo) {
         ped.arrays = pedestrianGeometry.model1.arrays;
         ped.bufferInfo = pedestrianGeometry.model1.bufferInfo;
         ped.vao = pedestrianGeometry.model1.vao;
-        ped.scale = { x: 0.1, y: 0.1, z: 0.1 }; // Smaller scale (reduced from 0.12)
+        ped.scale = { x: 1, y: 1, z: 1 }; // Smaller scale (reduced from 0.12)
         ped.yOffset = 0.5; // Offset to make base touch the ground (adjusted for model's Y range)
         ped.isPedestrian = true; // Mark as pedestrian for easier identification
         ped.isDynamic = true;
@@ -649,7 +649,7 @@ function checkForNewPedestrians() {
             ped.vao = pedestrianGeometry.model1.vao;
 
             // Set appearance - using person model for pedestrians with texture
-            ped.scale = { x: 0.1, y: 0.1, z: 0.1 }; // Smaller scale (reduced from 0.12)
+            ped.scale = { x: 0.05, y: 0.05, z: 0.05 }; // Reasonable pedestrian size
             ped.yOffset = 0.5; // Offset to make base touch the ground (adjusted for model's Y range)
             ped.isPedestrian = true; // Mark as pedestrian
             ped.isDynamic = true;
@@ -713,6 +713,12 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
         ];
     }
     let v3_sca = object.scaArray;
+    
+    // Debug: Log pedestrian scale
+    if (object.isPedestrian && !object._scaleLogged) {
+        console.log(`Pedestrian ${object.id} scale:`, object.scale, "scaArray:", v3_sca);
+        object._scaleLogged = true;
+    }
 
     // Create the individual transform matrices
     const scaMat = M4.scale(v3_sca);
