@@ -1,5 +1,6 @@
 from mesa import Model
 from mesa.experimental.cell_space import OrthogonalMooreGrid
+from mesa.datacollection import DataCollector
 from .agent import *
 import json
 import os
@@ -57,8 +58,12 @@ class CityModel(Model):
         # Stop condition: consecutive times all spawns were blocked
         self.consecutive_blocked_spawns = 0
         self.max_blocked_spawns = 3
+        
+        # Contadores acumulativos para estadísticas
+        self.total_cars_arrived = 0
+        self.total_pedestrians_arrived = 0
 
-        map_file_path = os.path.join(city_files_dir, "2025_base.txt")
+        map_file_path = os.path.join(city_files_dir, "2025_modified.txt")
         with open(map_file_path) as map_file:
             map_lines = map_file.readlines()
             self.width = len(map_lines[0])
@@ -120,6 +125,18 @@ class CityModel(Model):
 
         self.running = True
         self.pedestrians_enabled = True
+        
+        # DataCollector para recopilar estadísticas
+        self.datacollector = DataCollector(
+            model_reporters={
+                "active_cars": lambda m: sum(1 for agent in m.agents if isinstance(agent, Car) and agent.is_active()),
+                "arrived_cars": lambda m: m.total_cars_arrived,
+                "total_cars": lambda m: sum(1 for agent in m.agents if isinstance(agent, Car) and agent.is_active()) + m.total_cars_arrived,
+                "active_pedestrians": lambda m: sum(1 for agent in m.agents if isinstance(agent, Pedestrian) and agent.is_active()),
+                "arrived_pedestrians": lambda m: m.total_pedestrians_arrived,
+                "total_pedestrians": lambda m: sum(1 for agent in m.agents if isinstance(agent, Pedestrian) and agent.is_active()) + m.total_pedestrians_arrived,
+            }
+        )
         
 
     def set_spawn_interval(self, interval):
@@ -188,3 +205,6 @@ class CityModel(Model):
                         if available_targets:
                             target_destination = self.random.choice(available_targets)
                             Pedestrian(self, spawn_cell, destination=target_destination)
+        
+        # Recopilar datos para las gráficas
+        self.datacollector.collect(self)

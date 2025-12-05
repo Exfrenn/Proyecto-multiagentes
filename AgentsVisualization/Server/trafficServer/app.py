@@ -1,7 +1,7 @@
 from trafficAgents.traffic_base.agent import *
 from trafficAgents.traffic_base.model import CityModel
 
-from mesa.visualization import SolaraViz, make_space_component
+from mesa.visualization import SolaraViz, make_space_component, make_plot_component
 
 
 def agent_portrayal(agent):
@@ -46,6 +46,13 @@ def post_process(ax):
     ax.set_aspect("equal")
 
 
+def post_process_lines(ax):
+    """Format the line plot"""
+    ax.legend(loc="center left", bbox_to_anchor=(1, 0.9))
+    ax.set_xlabel("Steps")
+    ax.set_ylabel("Count")
+
+
 model_params = {
     "initial_agents_count": 5,
     "seed": {
@@ -70,9 +77,21 @@ space_component = make_space_component(
     agent_portrayal, draw_grid=False, post_process=post_process
 )
 
+# Componente de gráficas para mostrar estadísticas de tráfico
+lineplot_component = make_plot_component(
+    {
+        "active_cars": "blue",
+        "arrived_cars": "green",
+        "total_cars": "red",
+        "active_pedestrians": "purple",
+        "arrived_pedestrians": "orange",
+    },
+    post_process=post_process_lines,
+)
+
 page = SolaraViz(
     model,
-    components=[space_component],
+    components=[space_component, lineplot_component],
     model_params=model_params,
-    name="Random Model",
+    name="City Traffic Model",
 )
