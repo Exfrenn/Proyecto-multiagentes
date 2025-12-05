@@ -57,6 +57,10 @@ class CityModel(Model):
         # Stop condition: consecutive times all spawns were blocked
         self.consecutive_blocked_spawns = 0
         self.max_blocked_spawns = 3
+        
+        # Contadores acumulativos para estadísticas
+        self.total_cars_arrived = 0
+        self.total_pedestrians_arrived = 0
 
         map_file_path = os.path.join(city_files_dir, "2025_base.txt")
         with open(map_file_path) as map_file:

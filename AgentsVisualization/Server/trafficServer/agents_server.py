@@ -2,6 +2,11 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS, cross_origin
 from trafficAgents.traffic_base.model import CityModel
 from trafficAgents.traffic_base.agent import Car, Road, Traffic_Light, Obstacle, Destination, Sidewalk, PedestrianWalk, Pedestrian
+import requests as req
+import json
+
+url = "http://10.49.12.39:5000/api"
+endpoint = "attempt"
 
 noa = 10
 width = 30
@@ -345,19 +350,39 @@ def updateModel():
             
             # Calculate statistics from agents
             active_cars = sum(1 for agent in city_model.agents if isinstance(agent, Car) and agent.is_active())
-            arrived_cars = sum(1 for agent in city_model.agents if isinstance(agent, Car) and agent.is_arrived())
-            total_cars = sum(1 for agent in city_model.agents if isinstance(agent, Car))
+            arrived_cars = city_model.total_cars_arrived  # Usar contador acumulativo
+            total_cars = active_cars + arrived_cars  # Total = activos + llegados
+
+            if currentStep % 1 == 0:
+                data = {
+                    "year":2025,
+                    "classroom":301,
+                    "name": "Redstone",
+                    "current_cars":active_cars,
+                    "total_arrived":arrived_cars,
+                    "attempt_number":0
+                }
+                headers ={ "Content-Type": "application/json"}
+
+                response = req.post(url + "/" + endpoint, data = json.dumps(data), headers = headers)
+
+                print(f"Data: {data}")
+                print("Request " + ("successfull" if response.status_code == 200 else "failed") + " status code " + str(response.status_code))
+                try:
+                    print("Response: ", response.json())
+                except:
+                    print("Response (non-JSON): ", response.text)
             
             active_pedestrians = sum(1 for agent in city_model.agents if isinstance(agent, Pedestrian) and agent.is_active())
-            arrived_pedestrians = sum(1 for agent in city_model.agents if isinstance(agent, Pedestrian) and agent.is_arrived())
-            total_pedestrians = sum(1 for agent in city_model.agents if isinstance(agent, Pedestrian))
+            arrived_pedestrians = city_model.total_pedestrians_arrived  # Usar contador acumulativo
+            total_pedestrians = active_pedestrians + arrived_pedestrians  # Total = activos + llegados
             
             print("Active cars: ", active_cars)
             print("Arrived cars: ", arrived_cars)
             print("Total cars: ", total_cars)
-            print("Active pedestrians: ", active_pedestrians)
-            print("Arrived pedestrians: ", arrived_pedestrians)
-            print("Total pedestrians: ", total_pedestrians)
+            # print("Active pedestrians: ", active_pedestrians)
+            # print("Arrived pedestrians: ", arrived_pedestrians)
+            # print("Total pedestrians: ", total_pedestrians)
             
             return jsonify({
                 "message": f"Model updated to step {currentStep}",
@@ -365,9 +390,9 @@ def updateModel():
                     "active_cars": active_cars,
                     "arrived_cars": arrived_cars,
                     "total_cars": total_cars,
-                    "active_pedestrians": active_pedestrians,
-                    "arrived_pedestrians": arrived_pedestrians,
-                    "total_pedestrians": total_pedestrians
+                    # "active_pedestrians": active_pedestrians,
+                    # "arrived_pedestrians": arrived_pedestrians,
+                    # "total_pedestrians": total_pedestrians
                 }
             })
         except Exception as e:

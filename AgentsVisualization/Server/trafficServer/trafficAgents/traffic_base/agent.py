@@ -65,6 +65,8 @@ class Car(CellAgent):
         """Transition to arrived state."""
         self.main_state = MainState.ARRIVED
         self.navigating_state = None
+        # Incrementar contador acumulativo de carros
+        self.model.total_cars_arrived += 1
         self.remove()
     
     def transition_navigating_state(self, new_state):
@@ -491,6 +493,8 @@ class Pedestrian(CellAgent):
         """Transition to arrived state."""
         self.main_state = MainState.ARRIVED
         self.navigating_state = None
+        # Incrementar contador acumulativo de peatones
+        self.model.total_pedestrians_arrived += 1
         self.remove()
     
     def transition_navigating_state(self, new_state):

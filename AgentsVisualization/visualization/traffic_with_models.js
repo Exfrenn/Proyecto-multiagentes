@@ -36,7 +36,7 @@ let colorProgramInfo = undefined;
 let textureProgramInfo = undefined;
 let skyboxProgramInfo = undefined;
 let gl = undefined;
-const duration = 1000; // ms
+const duration = 1; // ms
 let elapsed = 0;
 let then = 0;
 
