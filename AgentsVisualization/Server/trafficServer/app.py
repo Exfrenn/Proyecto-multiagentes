@@ -85,6 +85,7 @@ lineplot_component = make_plot_component(
         "total_cars": "red",
         "active_pedestrians": "purple",
         "arrived_pedestrians": "orange",
+        "total_pedestrians": "brown",
     },
     post_process=post_process_lines,
 )
